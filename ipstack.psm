@@ -1,0 +1,299 @@
+
+net	   DSIN	 $01, "net_input.txt"
+neto   DSOUT $01, "net_output.txt"
+
+stack  		   EQU   $35 ; first free stack byte
+
+; variables used for packet parsing
+dmac   		   EQU	 $00
+smac   		   EQU	 $06
+
+; variables used for arp replies
+arp_static	   EQU	 $10 ; 7b
+arp_source	   EQU	 $17 ; 10b
+
+; varibales used for ip
+ip_saddr	   EQU	 $10 ; 4b
+
+; global variables
+mymac  		   EQU	 $36
+myip   		   EQU	 $3C
+
+; simulator is buggy. first port read is always zero
+in	  s0, net
+
+; store my ip and mac in memory
+load	s0, 192
+store	s0, myip
+load	s0, 168
+store	s0, myip + 1
+load	s0, 2
+store	s0, myip + 2
+load	s0, 153
+store	s0, myip + 3
+load	s0, $80
+store	s0, mymac
+load	s0, $86
+store	s0, mymac + 1
+load	s0, $f2
+store	s0, mymac + 2
+load	s0, $08
+store	s0, mymac + 3
+load	s0, $ec
+store	s0, mymac + 4
+load	s0, $92
+store	s0, mymac + 5
+
+load	sF, stack
+
+BEGIN:
+; read mac to mem
+load  s0, 12
+load  s1, dmac
+call READ_NET
+
+; read frame type. 0800 = IPv4, 0806 = ARP
+in     s0, net
+comp   s0, 8
+jump   NZ, NEXT_PACKET
+in     s0, net
+comp   s0, 0
+jump   Z, IP
+comp   s0, 6
+jump   Z, ARP
+jump   NEXT_PACKET
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; ARP reply
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; stack variables
+
+ARP:
+; this is an arp frame
+load   s0, 7
+load   s1, arp_static
+call   READ_NET
+in	   s0, net
+comp   s0, 1  	 ; arp request
+jump   NZ, NEXT_PACKET
+
+; read source ip and mac to mem
+load   s0, 10
+load   s1, arp_source
+call   READ_NET
+
+; scip search mac (00:00:00:00:00:00)
+load   s0, 6
+call   SKIP_NET
+; compare query IP to my IP
+load   s0, 4
+load   s1, myip
+call   COMPARE_NET
+test   s2, 1
+jump   Z, NEXT_PACKET
+
+; this is indeed an ARP request targeted at us.
+load   s4, 6 ; ARP protocol id
+call   WRITE_ETHERNET
+load   s0, 7
+load   s1, arp_static
+call   WRITE_NET	 ; first static 7b of arp packet
+load   s0, 2
+out	   s0, net		 ; arp type 2 == reply
+load   s0, 10
+load   s1, mymac	
+call   WRITE_NET	 ; arp source mac and ip
+load   s0, 10
+load   s1, arp_source
+call   WRITE_NET	 ; arp target mac and ip
+jump   NEXT_PACKET	 ; done
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; IP packet
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; sE: header size
+; sC, sD: payload size
+IP:
+in     sE, net ; read and extract packet header size
+and	   sE, $F
+sl0	   sE
+sl0	   sE  	   ; len *= 4
+in	   s0, net ; ignored
+in	   sC, net
+in	   sD, net
+sub	   sD, sE
+subc   sC, 0   ; payload len = total len - header len
+load   s0, 5
+call   SKIP_NET ; ignore 5 bytes
+in	   sA, net	; read protocol number
+load   s0, 2
+call   SKIP_NET ; ignore checksum
+load   s0, 4
+load   s1, ip_saddr
+call   READ_NET ; read source ip
+load   s0, 4
+load   s1, myip
+call   COMPARE_NET ; compare ip address
+test   s2, 1
+jump   Z, NEXT_PACKET ; skip packet if not addressed to us
+load   s0, sE
+sub	   s0, 20
+call   SKIP_NET ; ignore remaining header in case there is an optional one
+
+; check protocol id
+comp   sA, 1
+jump   Z, IP_ICMP
+comp   sA, 6
+jump   Z, IP_TCP
+jump   NEXT_PACKET	 ; unknown layer 4 protocol
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+IP_ICMP:
+comp	sC, 0
+jump	NZ, NEXT_PACKET	; drop packets larger than 255 bytes
+in		s0, net
+comp	s0, 8  		   ; icmp echo = 8
+jump	NZ, NEXT_PACKET
+load	s0, 3
+call	SKIP_NET	   ; skip code and checksum
+
+; start response
+load   s4, 0 ; IP protocol id
+call   WRITE_ETHERNET
+
+; write ip header
+load	s0, $45
+out		s0, net	 	 ; ip version and header size
+load	s3, 0
+out		s3, net		 ; DSCP, ECN
+load	s0, sC
+load	s1, sD
+add		s1, 20
+addc	s0, 0
+out		s0, net
+out		s1, net		 ; total length (header + payload)
+load	s0, $55
+out		s0, net
+out		s0, net		 ; IP identification
+out		s3, net		 ; flags
+out		s3, net		 ; fragment offset
+load	s0, 128		
+out		s0, net		 ; TTL
+load	s0, 1
+out		s0, net		 ; protocol (1 = ICMP)
+out		s3, net
+out		s3, net		 ; checksum
+load	s0, 4
+load	s1, myip
+call	WRITE_NET	 ; source ip
+load	s0, 4
+load	s1, ip_saddr ; destination ip
+call	WRITE_NET
+
+; write ICMP packet
+out		s3, net	 	 ; ICMP type 0 = echo reply
+out		s3, net		 ; ICMP code
+out		s3, net
+out		s3, net		 ; ICMP checksum
+sub		sD, 4		 ; payload size = icmp packet size - 4b for echo header
+IP_ICMP_ECHO_LOOP:
+in		s0, net
+out		s0, net
+sub		sD, 1
+jump	NZ, IP_ICMP_ECHO_LOOP
+
+jump   NEXT_PACKET; done
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+IP_TCP:
+jump   NEXT_PACKET ; done
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+WRITE_ETHERNET:
+; s0!, s1!, s2!
+; s4 - protocol low byte (0 = IP, 6 = ARP)
+load   s0, 6
+load   s1, smac	
+call   WRITE_NET	 ; destination mac
+load   s0, 6
+load   s1, mymac
+call   WRITE_NET	 ; source mac
+load   s0, 8
+out	   s0, net		 ; protocol type high
+out	   s4, net		 ; protocol type low
+ret
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+SKIP_NET:
+; s0! - number of bytes to skip
+; s1!
+comp  	s0, 0
+SKIP_NET_LOOP:
+ret		Z
+in		s1, net
+sub		s0, 1
+jump	SKIP_NET_LOOP
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+READ_NET:
+; s0! - bytes to read
+; s1! - address to store to (s1 + s0 after execution)
+; s2!
+in	  	s2, net
+store	s2, s1
+add		s1, 1
+sub		s0, 1
+jump	NZ, READ_NET
+ret
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+WRITE_NET:
+; s0! - bytes to write
+; s1! - address to load from (s1 + s0 after execution)
+; s2!
+fetch 	s2, s1
+out		s2, neto
+add		s1, 1
+sub		s0, 1
+jump	NZ, WRITE_NET
+ret
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+COMPARE_NET:
+; s0! - bytes to read
+; s1! - address to load from (s1 + s0 after execution)
+; s2! - returns 1 if equal and 2 if equal to FF
+; s3!
+; s4!
+load  	s2, 3
+COMPARE_NET_LOOP:
+in	  	s3, net
+comp	s3, $FF
+jump	Z, COMPARE_NET_TEST
+and		s2, $FD ; ~2
+COMPARE_NET_TEST:
+fetch 	s4, s1
+comp	s4, s3
+jump	Z, COMPARE_NET_NEXT
+and		s2, $FE ; ~1
+COMPARE_NET_NEXT:
+add		s1, 1
+sub		s0, 1
+jump	NZ, COMPARE_NET_LOOP
+ret
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+NEXT_PACKET:
+jump	NEXT_PACKET
+
+
+
+
+
+
+
+
+
+
