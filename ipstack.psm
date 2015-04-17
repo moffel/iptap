@@ -2,7 +2,8 @@
 net	   DSIN	 $01, "net_input.txt"
 neto   DSOUT $01, "net_output.txt"
 
-stack  		   EQU   $35 ; first free stack byte
+tcp_port	   EQU	 80
+stack  		   EQU   $33 ; first free stack byte
 
 ; variables used for packet parsing
 dmac   		   EQU	 $00
@@ -15,7 +16,14 @@ arp_source	   EQU	 $17 ; 10b
 ; varibales used for ip
 ip_saddr	   EQU	 $10 ; 4b
 
+; variables used for tcp
+tcp_sport	   EQU	 $14 ; 2b - source port sent by client
+tcp_seq		   EQU	 $18 ; 4b - sequence number sent by client
+tcp_ack		   EQU	 $1C ; 4b - ack number sent by client
+
 ; global variables
+tcp_peer 	   EQU	 $34 ; hash to identify remote peer
+tcp_state	   EQU	 $35 ; tcp connection state (0 = listen, 1 = syn received, 2 = established)
 mymac  		   EQU	 $36
 myip   		   EQU	 $3C
 
@@ -43,6 +51,11 @@ load	s0, $ec
 store	s0, mymac + 4
 load	s0, $92
 store	s0, mymac + 5
+
+; initical tcp state
+load	s0, 0
+store	s0, tcp_peer
+store	s0, tcp_state
 
 load	sF, stack
 
@@ -158,38 +171,11 @@ jump	NZ, NEXT_PACKET
 load	s0, 3
 call	SKIP_NET	   ; skip code and checksum
 
-; start response
-load   s4, 0 ; IP protocol id
-call   WRITE_ETHERNET
-
 ; write ip header
-load	s0, $45
-out		s0, net	 	 ; ip version and header size
-load	s3, 0
-out		s3, net		 ; DSCP, ECN
-load	s0, sC
-load	s1, sD
-add		s1, 20
-addc	s0, 0
-out		s0, net
-out		s1, net		 ; total length (header + payload)
-load	s0, $55
-out		s0, net
-out		s0, net		 ; IP identification
-out		s3, net		 ; flags
-out		s3, net		 ; fragment offset
-load	s0, 128		
-out		s0, net		 ; TTL
-load	s0, 1
-out		s0, net		 ; protocol (1 = ICMP)
-out		s3, net
-out		s3, net		 ; checksum
-load	s0, 4
-load	s1, myip
-call	WRITE_NET	 ; source ip
-load	s0, 4
-load	s1, ip_saddr ; destination ip
-call	WRITE_NET
+load	s5, 1
+load	s6, sC	
+load	s7, sD	 	   	; reply package has same payload length as request
+call	WRITE_IP_HEAD
 
 ; write ICMP packet
 out		s3, net	 	 ; ICMP type 0 = echo reply
@@ -208,7 +194,195 @@ jump   NEXT_PACKET; done
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 IP_TCP:
-jump   NEXT_PACKET ; done
+load   s0, 3			; read two bytes and skip one
+load   s1, tcp_sport
+call   READ_NET			; read source port for reply
+in	   s0, net
+comp   s0, tcp_port
+jump   NZ, NEXT_PACKET	; compare destination port to our port number (80)
+load   s0, 8
+load   s1, tcp_seq
+call   READ_NET	  		; read seq and ack number
+in	   s4, net			; read data offset
+sr0	   s4
+sr0	   s4
+in	   s5, net			; read flags
+fetch  s0, tcp_state
+comp   s0, 0
+jump   Z, TCP_LISTEN
+
+; check seq number if not in listen state
+; this may be due to another connection packet or packet loss
+; we will have to request a resend in case of packet loss
+fetch  s1, tcp_seq
+fetch  s2, tcp_peer
+comp   s1, s2
+jump   NZ, NEXT_PACKET	  
+test	s5, $10
+jump	Z, TCP_RESET_STATE ; reset connection if no ACK
+
+comp   s0, 1
+jump   Z, TCP_SYNSENT
+comp   s0, 2
+jump   Z, TCP_CONNECTED
+jump   NEXT_PACKET
+
+;; TCP state connected
+TCP_CONNECTED:
+load	s0, s4
+sub		s0, 14		  ; we already read 14b of tcp header
+call	SKIP_NET	  ; skip tcp header
+sub		sD, s4
+subc	sC, 0 		  ; sub tcp header from ip payload size
+jump	HTTP_PARSE	  ; begin content parsing
+
+;; TCP state syn sent
+TCP_SYNSENT:
+; we should check some data here but there is no reply and no sync increment during hanshake
+jump	TCP_NEXT_STATE
+
+;; TCP state listen
+TCP_LISTEN:
+test	s5, 2	   		; check syn flag
+jump	Z, NEXT_PACKET	; only accept new connections in listen state
+
+; generate new sequence number
+fetch	s0, tcp_seq
+fetch	s1, tcp_seq + 1
+fetch	s2, tcp_seq + 2
+fetch	s3, tcp_seq + 3
+xor		s0, $55
+xor		s1, $A7
+xor		s2, $48
+xor		s3, $87		   		  ; some renadom keys for randomisation
+store	s0, tcp_ack
+store	s1, tcp_ack + 1
+store	s2, tcp_ack + 2
+store	s3, tcp_ack + 3
+
+load	s6, 0
+load	s7, 0			; no payload
+load	s8, $12			; ACK, SYN
+call	WRITE_TCP_HEAD
+jump	TCP_NEXT_STATE	; nop
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+TCP_NEXT_STATE:
+; change state
+fetch	s0, tcp_state
+add		s0, 1
+store	s0, tcp_state
+jump    NEXT_PACKET  ; done
+
+TCP_RESET_STATE:
+load	s0, 0
+store	s0, tcp_state
+jump	NEXT_PACKET
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; HTTP
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+HTTP_PARSE:
+; simple echo function as dummy
+load	s6, sC
+load	s7, sD
+load	s8, $10		   ; ACK
+call	WRITE_TCP_HEAD
+
+ECHO_LOOP:
+load	s0, s6
+or		s0, s7
+jump	Z, NEXT_PACKET
+in		s0, net
+out		s0, neto
+sub		s7, 1
+subc	s6, 0
+jump	ECHO_LOOP
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; s0!, s1!, s2!, s3!, s4!, s5!
+; s6!, s7! - payload length
+; s8 - tcp flags
+WRITE_TCP_HEAD:
+load	s5, 6			; tcp
+add		s7, 20			; add tcp header size
+addc	s6, 0
+call	WRITE_IP_HEAD
+load	s5, 0
+out		s5, neto
+load	s0, tcp_port
+out		s0, neto	 	; source port
+load	s0, 2
+load	s1, tcp_sport
+call	WRITE_NET	 	; destination port
+load	s0, 4
+load	s1, tcp_ack
+call	WRITE_NET  		; send received ack as sequence (may be changed)
+
+; calc ack number
+fetch   s0, tcp_seq
+fetch   s1, tcp_seq + 1
+fetch   s2, tcp_seq + 2
+fetch   s3, tcp_seq + 3
+add		s3, 1
+addc	s2, 0
+addc	s1, 0
+addc	s0, 0
+out		s0, neto
+out		s1, neto
+out		s2, neto
+out		s3, neto
+store	s3, tcp_peer
+
+load	s0, $50
+out		s0, neto	; header size
+out		s8, neto	; tcp flags
+load	s0, 2
+out		s0, neto
+load	s0, 128
+out		s0, neto	; 640b window size
+load	s0, 0
+out		s0, neto
+out		s0, neto	; checksum
+out		s0, neto
+out		s0, neto	; urgent pointer
+ret
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+WRITE_IP_HEAD:
+; s0!, s1!, s2!, s3!, s4!
+; s5 - protocol id (1 = ICMP, 6 = TCP)
+; s6!, s7! - payload length
+load    s4, 0 ; IP protocol id
+call    WRITE_ETHERNET
+
+load	s0, $45
+out		s0, net	 	 ; ip version and header size
+load	s3, 0
+out		s3, net		 ; DSCP, ECN
+add		s7, 20
+addc	s6, 0
+out		s6, net
+out		s7, net		 ; total length (header + payload)
+load	s0, $55
+out		s0, net
+out		s0, net		 ; IP identification
+out		s3, net		 ; flags
+out		s3, net		 ; fragment offset
+load	s0, 128		
+out		s0, net		 ; TTL
+load	s0, 1
+out		s5, net		 ; protocol
+out		s3, net
+out		s3, net		 ; checksum
+load	s0, 4
+load	s1, myip
+call	WRITE_NET	 ; source ip
+load	s0, 4
+load	s1, ip_saddr ; destination ip
+call	WRITE_NET
+ret
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 WRITE_ETHERNET:
@@ -287,13 +461,5 @@ ret
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 NEXT_PACKET:
 jump	NEXT_PACKET
-
-
-
-
-
-
-
-
 
 
