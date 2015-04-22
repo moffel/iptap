@@ -31,24 +31,23 @@ architecture Behavioral of netrxtest is
 	
 	COMPONENT etherx
 	PORT(
-		RST : IN std_logic;
-		RX_CLK : IN std_logic;
-		RX_D : IN std_logic_vector(3 downto 0);
-		RX_DV : IN std_logic;
-		O_CLK : IN std_logic;
-		O_NEXT : IN std_logic;
-		O_DONE : IN std_logic;          
-		O_D : OUT std_logic_vector(7 downto 0);
-		O_READY : OUT std_logic
+		rst : IN std_logic;
+		clk : IN std_logic;
+		rx_clk : IN std_logic;
+		rx_d : IN std_logic_vector(3 downto 0);
+		rx_dv : IN std_logic;
+		o_addr : IN std_logic_vector(9 downto 0);
+		o_done : IN std_logic;          
+		o_ready : OUT std_logic;
+		o_data : OUT std_logic_vector(7 downto 0)
 		);
 	END COMPONENT;
 
-	signal data_dummy : std_logic_vector(7 downto 0);
 	signal data : std_logic_vector(7 downto 0);
 	signal data_send : std_logic; -- send byte to uart
-	signal data_send_req : std_logic; -- send byte to uart
 	signal data_sent : std_logic; -- byte sent by uart
-	signal data_counter : std_logic_vector(3 downto 0);
+	signal data_counter : std_logic_vector(5 downto 0);
+	signal data_addr : std_logic_vector(9 downto 0);
 	signal data_ready : std_logic; -- frame received
 	signal data_done : std_logic; -- processing of frame done
 begin
@@ -56,7 +55,8 @@ begin
 	E_NRST <= not rst;
 	E_MDC <= '0';
 	E_MDIO <= '0';
-	data_dummy <= "1001" & data_counter;
+	
+	data_addr <= std_logic_vector( unsigned(data_counter) - 1 );
 
 	Inst_kcuart_tx: kcuart_tx PORT MAP(
 		data_in => data,
@@ -68,23 +68,22 @@ begin
 	);
 
 	Inst_etherx: etherx PORT MAP(
-		RST => rst,
-		RX_CLK => E_RX_CLK,
-		RX_D => E_RXD,
-		RX_DV => E_RX_DV,
-		O_CLK => clk,
-		O_D => data,
-		O_READY => data_ready,
-		O_NEXT => data_sent,
-		O_DONE => data_done
+		rst => rst,
+		clk => clk,
+		rx_clk => E_RX_CLK,
+		rx_d => E_RXD,
+		rx_dv => E_RX_DV,
+		o_ready => data_ready,
+		o_addr => data_addr,
+		o_data => data,
+		o_done => data_done
 	);
 
-	process(clk)
+	process(clk, rst)
 	begin
 		if rst = '1' then
 			tx_clk_en <= (others => '0');
 			data_counter <= (others => '0');
-			data_send_req <= '0';
 			data_send <= '0';
 		elsif clk'event and clk = '1' then
 		

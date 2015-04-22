@@ -2,7 +2,7 @@
 -- Company: 
 -- Engineer:
 --
--- Create Date:   22:13:50 04/21/2015
+-- Create Date:   18:59:25 04/22/2015
 -- Design Name:   
 -- Module Name:   D:/daten/source/ISE/DS/iptap/hw/test_etherx.vhd
 -- Project Name:  iptap
@@ -30,7 +30,7 @@ USE ieee.std_logic_1164.ALL;
  
 -- Uncomment the following library declaration if using
 -- arithmetic functions with Signed or Unsigned values
---USE ieee.numeric_std.ALL;
+USE ieee.numeric_std.ALL;
  
 ENTITY test_etherx IS
 END test_etherx;
@@ -41,66 +41,66 @@ ARCHITECTURE behavior OF test_etherx IS
  
     COMPONENT etherx
     PORT(
-         RST : IN  std_logic;
-         RX_CLK : IN  std_logic;
-         RX_D : IN  std_logic_vector(3 downto 0);
-         RX_DV : IN  std_logic;
-         O_CLK : IN  std_logic;
-         O_D : OUT  std_logic_vector(7 downto 0);
-         O_READY : OUT  std_logic;
-         O_NEXT : IN  std_logic;
-         O_DONE : IN  std_logic
+         rst : IN  std_logic;
+         clk : IN  std_logic;
+         rx_clk : IN  std_logic;
+         rx_d : IN  std_logic_vector(3 downto 0);
+         rx_dv : IN  std_logic;
+         o_ready : OUT  std_logic;
+         o_addr : IN  std_logic_vector(9 downto 0);
+         o_data : OUT  std_logic_vector(7 downto 0);
+         o_done : IN  std_logic
         );
     END COMPONENT;
     
 
    --Inputs
-   signal RST : std_logic := '0';
-   signal RX_CLK : std_logic := '0';
-   signal RX_D : std_logic_vector(3 downto 0) := (others => '0');
-   signal RX_DV : std_logic := '0';
-   signal O_CLK : std_logic := '0';
-   signal O_NEXT : std_logic := '0';
-   signal O_DONE : std_logic := '0';
+   signal rst : std_logic := '0';
+   signal clk : std_logic := '0';
+   signal rx_clk : std_logic := '0';
+   signal rx_d : std_logic_vector(3 downto 0) := (others => '0');
+   signal rx_dv : std_logic := '0';
+   signal o_addr : std_logic_vector(9 downto 0) := (others => '0');
+   signal o_done : std_logic := '0';
 
  	--Outputs
-   signal O_D : std_logic_vector(7 downto 0);
-   signal O_READY : std_logic;
+   signal o_ready : std_logic;
+   signal o_data : std_logic_vector(7 downto 0);
 
    -- Clock period definitions
-   constant RX_CLK_period : time := 20 ns;
-   constant O_CLK_period : time := 6 ns;
+   constant clk_period : time := 6 ns;
+   constant rx_clk_period : time := 20 ns;
  
 BEGIN
  
 	-- Instantiate the Unit Under Test (UUT)
    uut: etherx PORT MAP (
-          RST => RST,
-          RX_CLK => RX_CLK,
-          RX_D => RX_D,
-          RX_DV => RX_DV,
-          O_CLK => O_CLK,
-          O_D => O_D,
-          O_READY => O_READY,
-          O_NEXT => O_NEXT,
-          O_DONE => O_DONE
+          rst => rst,
+          clk => clk,
+          rx_clk => rx_clk,
+          rx_d => rx_d,
+          rx_dv => rx_dv,
+          o_ready => o_ready,
+          o_addr => o_addr,
+          o_data => o_data,
+          o_done => o_done
         );
 
    -- Clock process definitions
-   RX_CLK_process :process
+   clk_process :process
    begin
-		RX_CLK <= '0';
-		wait for RX_CLK_period/2;
-		RX_CLK <= '1';
-		wait for RX_CLK_period/2;
+		clk <= '0';
+		wait for clk_period/2;
+		clk <= '1';
+		wait for clk_period/2;
    end process;
  
-   O_CLK_process :process
+   rx_clk_process :process
    begin
-		O_CLK <= '0';
-		wait for O_CLK_period/2;
-		O_CLK <= '1';
-		wait for O_CLK_period/2;
+		rx_clk <= '0';
+		wait for rx_clk_period/2;
+		rx_clk <= '1';
+		wait for rx_clk_period/2;
    end process;
  
 
@@ -108,40 +108,225 @@ BEGIN
    stim_proc: process
    begin		
       -- hold reset state for 100 ns.
-		RST <= '1';
+		rst <= '1';
       wait for 100 ns;	
-		RST <= '0';
-      wait for RX_CLK_period*10;
+		rst <= '0';
+      wait for clk_period*10;
 
-		RX_DV <= '1';
-		RX_D <= "1001";
-		wait for RX_CLK_period;
-		RX_D <= "1010";
-		wait for RX_CLK_period;
-		RX_D <= "1011";
-		wait for RX_CLK_period;
-		RX_D <= "1100";
-		wait for RX_CLK_period;
-		RX_D <= "1101";
-		wait for RX_CLK_period;
-		RX_D <= "1110";
-		wait for RX_CLK_period;
-		RX_D <= "1111";
-		wait for RX_CLK_period;
-		RX_D <= "0000";
-		wait for RX_CLK_period;
-		RX_DV <= '0';
+		rx_dv <= '1';
+		rx_d <= "0101";
+      wait for rx_clk_period*15;
+		rx_d <= "1101";
+		wait for rx_clk_period;
+		
+		-- the following is an captured arp package
+		rx_d <= x"f";
+		wait for rx_clk_period;
+		rx_d <= x"f";
+		wait for rx_clk_period;
+		rx_d <= x"f";
+		wait for rx_clk_period;
+		rx_d <= x"f";
+		wait for rx_clk_period;
+		rx_d <= x"f";
+		wait for rx_clk_period;
+		rx_d <= x"f";
+		wait for rx_clk_period;
+		rx_d <= x"f";
+		wait for rx_clk_period;
+		rx_d <= x"f";
+		wait for rx_clk_period;
+		rx_d <= x"f";
+		wait for rx_clk_period;
+		rx_d <= x"f";
+		wait for rx_clk_period;
+		rx_d <= x"f";
+		wait for rx_clk_period;
+		rx_d <= x"f";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"9";
+		wait for rx_clk_period;
+		rx_d <= x"6";
+		wait for rx_clk_period;
+		rx_d <= x"e";
+		wait for rx_clk_period;
+		rx_d <= x"a";
+		wait for rx_clk_period;
+		rx_d <= x"b";
+		wait for rx_clk_period;
+		rx_d <= x"3";
+		wait for rx_clk_period;
+		rx_d <= x"4";
+		wait for rx_clk_period;
+		rx_d <= x"d";
+		wait for rx_clk_period;
+		rx_d <= x"1";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"b";
+		wait for rx_clk_period;
+		rx_d <= x"8";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"6";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"1";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"8";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"6";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"4";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"1";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"9";
+		wait for rx_clk_period;
+		rx_d <= x"6";
+		wait for rx_clk_period;
+		rx_d <= x"e";
+		wait for rx_clk_period;
+		rx_d <= x"a";
+		wait for rx_clk_period;
+		rx_d <= x"b";
+		wait for rx_clk_period;
+		rx_d <= x"3";
+		wait for rx_clk_period;
+		rx_d <= x"4";
+		wait for rx_clk_period;
+		rx_d <= x"d";
+		wait for rx_clk_period;
+		rx_d <= x"1";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"b";
+		wait for rx_clk_period;
+		rx_d <= x"a";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"1";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"a";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"2";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		-- arp has only 42 byte so we have to append 64-42-4 padding bytes
+		wait for rx_clk_period * 36;
+		-- and 4b crc 0x000b74ff
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"b";
+		wait for rx_clk_period;
+		rx_d <= x"0";
+		wait for rx_clk_period;
+		rx_d <= x"4";
+		wait for rx_clk_period;
+		rx_d <= x"7";
+		wait for rx_clk_period;
+		rx_d <= x"f";
+		wait for rx_clk_period;
+		rx_d <= x"f";
+		wait for rx_clk_period;
+		
 
-		wait for O_CLK_period*5;
+		rx_dv <= '0';
+		rx_d <= (others => '0');
 		
-		O_NEXT <= '1';
-		wait for O_CLK_period*4;
-		O_NEXT <= '0';
-		O_DONE <= '1';
-		wait for O_CLK_period;
-		O_DONE <= '0';
-		wait for O_CLK_period*6;
+		-- wait for trigger propagate
+		wait for clk_period*8;
 		
+		o_addr <= "0000000000";
+		wait for clk_period;
+		o_addr <= "0000000001";
+		wait for clk_period;
+		o_addr <= "0000000011";
+		wait for clk_period;
+		o_addr <= "0000000100";
+		wait for clk_period;
+		
+		o_done <= '1';
+		wait for clk_period;
+		o_done <= '0';
       -- insert stimulus here 
 
       wait;

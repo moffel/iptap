@@ -18,14 +18,18 @@ void main()
 	state.StopBits = 1;
 	SetCommState(hCom, &state);
 
-	unsigned char data[16];
+	unsigned counter = 0;
+	unsigned char data[64] = {};
 	DWORD read;
-	while (ReadFile(hCom, data, 16, &read, NULL))
+	while (ReadFile(hCom, data, sizeof(data), &read, NULL))
 	{
-		printf("got %2ib: ", read);
+		printf("%4i:\t", counter++);
 		for (DWORD i = 0; i < read; ++i)
 		{
-			printf("%X%X ", data[i] >> 4, data[i] & 0xf);
+			printf("%x%x ", data[i] >> 4, data[i] & 0xf);
+			if (i % 16 == 15)
+				printf("\n\t");
+			data[i] = 0;
 		}
 		puts("");
 	}
