@@ -11,17 +11,17 @@ use IEEE.NUMERIC_STD.ALL;
 --use UNISIM.VComponents.all;
 
 entity etherx is
-    Port (	RST : in std_logic;
-				RX_CLK : in  STD_LOGIC;
-           RX_D : in  STD_LOGIC_VECTOR (3 downto 0);
-           RX_DV : in  STD_LOGIC;
-           O_CLK : in  STD_LOGIC;
-           O_D : out  STD_LOGIC_VECTOR (7 downto 0);
-			  O_READY : out std_logic;
-           O_NEXT : in  STD_LOGIC;
-           O_DONE : in  STD_LOGIC);
-end etherx;
+    Port (	rst, clk : in std_logic;
+				
+				rx_clk : in std_logic;
+				rx_d : in std_logic_vector (7 downto 0);
+				rx_dv : in std_logic;
 
+				o_ready : out std_logic; -- frame is available for reading
+				o_addr : in std_logic_vector(9 downto 0);
+				o_data : out std_logic_vector(7 downto 0);
+				o_done : in std_logic); -- frame reading done
+end etherx;
 
 architecture Behavioral of etherx is
 
@@ -29,8 +29,8 @@ architecture Behavioral of etherx is
 	  PORT (
 		 clka : IN STD_LOGIC;
 		 wea : IN STD_LOGIC_VECTOR(0 DOWNTO 0);
-		 addra : IN STD_LOGIC_VECTOR(10 DOWNTO 0);
-		 dina : IN STD_LOGIC_VECTOR(3 DOWNTO 0);
+		 addra : IN STD_LOGIC_VECTOR(9 DOWNTO 0);
+		 dina : IN STD_LOGIC_VECTOR(7 DOWNTO 0);
 		 clkb : IN STD_LOGIC;
 		 addrb : IN STD_LOGIC_VECTOR(9 DOWNTO 0);
 		 doutb : OUT STD_LOGIC_VECTOR(7 DOWNTO 0)
@@ -47,108 +47,91 @@ architecture Behavioral of etherx is
 	type state_type is (IDLE, RECEIVING, WAITING, DONE);
 	signal state, next_state: state_type;
 
-	signal RX_ADDR: std_logic_vector(10 downto 0);
-	signal O_ADDR: std_logic_vector(9 downto 0);
-	signal frame_received: std_logic;
-	signal next_frame: std_logic;
+	signal o_next_trigger : std_logic;
+	signal o_ready_trigger : std_logic;
 
-	signal dv: std_logic_vector(0 downto 0);
+	signal write_addr : std_logic_vector(9 downto 0);
+	signal write_enable : std_logic_vector(0 downto 0);
 begin
-
-	dv(0) <= RX_DV;
 	
 ram : netrxram
   PORT MAP (
-    clka => RX_CLK,
-    wea => dv,
-    addra => RX_ADDR,
-    dina => RX_D,
-    clkb => O_CLK,
-    addrb => O_ADDR,
-    doutb => O_D
+    clka => rx_clk,
+    wea => write_enable,
+    addra => write_addr,
+    dina => rx_d,
+    clkb => clk,
+    addrb => o_addr,
+    doutb => o_data
   );
   
 -- ETHERNET clock domain
-  
+
+	write_enable(0) <=	'1' when state = RECEIVING and rx_dv = '1' else
+								'0';
+	o_ready_trigger <=	'1' when state = RECEIVING and next_state = WAITING else
+								'0';
+
 	process(RX_CLK, RST)
 	begin
 		if RST = '1' then
 			state <= DONE;
-			RX_ADDR <= (others => '0');
+			write_addr <= (others => '0');
 		elsif RX_CLK'event and RX_CLK = '1' then
 			state <= next_state;
 
-			if RX_DV = '1' then
-				RX_ADDR <= std_logic_vector( unsigned(RX_ADDR) + 1 );
+			if write_enable(0) = '1' then
+				write_addr <= std_logic_vector( unsigned(write_addr) + 1 );
 			else
-				RX_ADDR <= (others => '0');
+				write_addr <= (others => '0');
 			end if;
 			
-			frame_received <= '0';
-			if state = RECEIVING and next_state = WAITING then
-				frame_received <= '1';
-			end if;
 		end if;
 	end process;
 	
-	process(state, RX_DV, next_frame)
+	process(state, rx_dv, rx_d, o_next_trigger)
 	begin
 		next_state <= state;
 	
 		case state is
 			when IDLE =>
-				if RX_DV = '1' then
+				if rx_dv = '1' and rx_d = "01010101" then
 					next_state <= RECEIVING;
 				end if;
 			
 			when RECEIVING =>
-				if RX_DV = '0' then
+				if rx_dv = '0' then
 					next_state <= WAITING;
 				end if;
 				
 			when WAITING =>
-				if next_frame = '1' then
+				if o_next_trigger = '1' then
 					next_state <= DONE;
 				end if;
 
 			when DONE =>
-				if RX_DV = '0' then
+				if rx_dv = '0' then
 					next_state <= IDLE;
 				end if;
 		end case;
-	end process;
-
--- output clock domain
-
-	process(O_CLK, RST)
-	begin
-		if RST = '1' then
-			O_ADDR <= (others => '0');
-		elsif O_CLK'event and O_CLK = '1' then
-			if O_DONE = '1' then
-				O_ADDR <= (others => '0');
-			elsif O_NEXT = '1' then
-				O_ADDR <= std_logic_vector( unsigned(O_ADDR) + 1 );
-			end if;
-		end if;
 	end process;
 
 -- bridge between clock domains
 
 	frame_done_trigger : trigger
 	port map (
-		IN_CLK => RX_CLK,
-		IN_D => frame_received,
-		OUT_CLK => O_CLK,
-		OUT_D => O_READY
+		IN_CLK => rx_clk,
+		IN_D => o_ready_trigger,
+		OUT_CLK => clk,
+		OUT_D => o_ready
 	);
 	
 	next_frame_trigger : trigger
 	port map (
-		IN_CLK => O_CLK,
-		IN_D => O_DONE,
-		OUT_CLK => RX_CLK,
-		OUT_D => next_frame
+		IN_CLK => clk,
+		IN_D => o_done,
+		OUT_CLK => rx_clk,
+		OUT_D => o_next_trigger
 	);
 
 end Behavioral;

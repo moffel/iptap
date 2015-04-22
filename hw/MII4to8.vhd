@@ -7,6 +7,7 @@ entity MII4to8 is
 		rst : in std_logic;
 		
 		in_clk : in std_logic;
+		in_dv : in std_logic;
 		in_d : in std_logic_vector(3 downto 0);
 
 		out_clk : out std_logic;		
@@ -17,20 +18,39 @@ end entity MII4to8;
 
 architecture RTL of MII4to8 is
 	
+	component BUFGS 
+		port (I: in  STD_LOGIC; 
+				O: out STD_LOGIC);
+	end component;
+
+	signal int_addr : std_logic;
 begin
+	
+	GBUF_FOR_MUX_CLOCK: BUFGS 
+   port map (I => CLOCK, 
+             O => CLOCK_GBUF);
 	
 	process(in_clk, rst)
 	begin
 		if rst = '1' then
-			out_clk <= '0';
+			
+			int_addr <= '1';
+			
 		elsif in_clk'event and in_clk = '1' then
+		
+			int_clk <= not int_clk;
 			
-			out_clk <= not out_clk;
-			
-			if out_clk = '0' then
-				out_d(3 downto 0) <= in_d;
-			else
-				out_d(7 downto 4) <= in_d;
+			if in_dv = '1' then
+	
+				if int_addr = '1' then
+					out_d(3 downto 0) <= in_d;
+					int_addr <= '0';
+				else
+					out_d(7 downto 4) <= in_d;
+					out_e <= '1';
+					int_addr <= '1';
+				end if;
+				
 			end if;
 			
 		end if;
