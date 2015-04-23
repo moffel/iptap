@@ -36,7 +36,7 @@ architecture Behavioral of netrxtest is
 		rx_clk : IN std_logic;
 		rx_d : IN std_logic_vector(3 downto 0);
 		rx_dv : IN std_logic;
-		o_addr : IN std_logic_vector(9 downto 0);
+		o_addr : IN std_logic_vector(10 downto 0);
 		o_done : IN std_logic;          
 		o_ready : OUT std_logic;
 		o_data : OUT std_logic_vector(7 downto 0)
@@ -47,7 +47,7 @@ architecture Behavioral of netrxtest is
 	signal data_send : std_logic; -- send byte to uart
 	signal data_sent : std_logic; -- byte sent by uart
 	signal data_counter : std_logic_vector(5 downto 0);
-	signal data_addr : std_logic_vector(9 downto 0);
+	signal data_addr : std_logic_vector(10 downto 0);
 	signal data_ready : std_logic; -- frame received
 	signal data_done : std_logic; -- processing of frame done
 begin
@@ -56,7 +56,7 @@ begin
 	E_MDC <= '0';
 	E_MDIO <= '0';
 	
-	data_addr <= std_logic_vector( unsigned(data_counter) - 1 );
+	data_addr <= "00000" & std_logic_vector( unsigned(data_counter) - 1 );
 
 	Inst_kcuart_tx: kcuart_tx PORT MAP(
 		data_in => data,

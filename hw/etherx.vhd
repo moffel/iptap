@@ -18,7 +18,7 @@ entity etherx is
 				rx_dv : in std_logic;
 
 				o_ready : out std_logic; -- frame is available for reading
-				o_addr : in std_logic_vector(9 downto 0);
+				o_addr : in std_logic_vector(10 downto 0);
 				o_data : out std_logic_vector(7 downto 0);
 				o_done : in std_logic); -- frame reading done
 end etherx;
@@ -29,10 +29,10 @@ architecture Behavioral of etherx is
 	  PORT (
 		 clka : IN STD_LOGIC;
 		 wea : IN STD_LOGIC_VECTOR(0 DOWNTO 0);
-		 addra : IN STD_LOGIC_VECTOR(9 DOWNTO 0);
+		 addra : IN STD_LOGIC_VECTOR(10 DOWNTO 0);
 		 dina : IN STD_LOGIC_VECTOR(7 DOWNTO 0);
 		 clkb : IN STD_LOGIC;
-		 addrb : IN STD_LOGIC_VECTOR(9 DOWNTO 0);
+		 addrb : IN STD_LOGIC_VECTOR(10 DOWNTO 0);
 		 doutb : OUT STD_LOGIC_VECTOR(7 DOWNTO 0)
 	  );
 	END COMPONENT;
@@ -60,7 +60,7 @@ architecture Behavioral of etherx is
 	signal o_next_trigger : std_logic;
 	signal o_ready_trigger : std_logic;
 
-	signal write_addr : std_logic_vector(9 downto 0);
+	signal write_addr : std_logic_vector(10 downto 0);
 	signal write_enable : std_logic_vector(0 downto 0);
 	
 	signal rx_byte : std_logic_vector(7 downto 0);
@@ -142,7 +142,7 @@ begin
 		end if;
 	end process;
 	
-	process(state, rx_dv, rx_byte, o_next_trigger)
+	process(state, rx_dv, rx_byte, o_next_trigger, crc_valid)
 	begin
 		next_state <= state;
 	
