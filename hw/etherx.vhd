@@ -104,14 +104,10 @@ begin
 	crc_rst <=				'1' when state = IDLE else
 								'0';
 	
-	rx_byte_rev(7) <= rx_byte(0);
-	rx_byte_rev(6) <= rx_byte(1);
-	rx_byte_rev(5) <= rx_byte(2);
-	rx_byte_rev(4) <= rx_byte(3);
-	rx_byte_rev(3) <= rx_byte(4);
-	rx_byte_rev(2) <= rx_byte(5);
-	rx_byte_rev(1) <= rx_byte(6);
-	rx_byte_rev(0) <= rx_byte(7);
+	crc_byte_reverse:
+	for I in 0 to 7 generate
+		rx_byte_rev(7-I) <= rx_byte(I);
+	end generate;
 	
 	rx_byte(7 downto 4) <= rx_d;
 

@@ -47,7 +47,7 @@ ARCHITECTURE behavior OF test_etherx IS
          rx_d : IN  std_logic_vector(3 downto 0);
          rx_dv : IN  std_logic;
          o_ready : OUT  std_logic;
-         o_addr : IN  std_logic_vector(9 downto 0);
+         o_addr : IN  std_logic_vector(10 downto 0);
          o_data : OUT  std_logic_vector(7 downto 0);
          o_done : IN  std_logic
         );
@@ -60,7 +60,7 @@ ARCHITECTURE behavior OF test_etherx IS
    signal rx_clk : std_logic := '0';
    signal rx_d : std_logic_vector(3 downto 0) := (others => '0');
    signal rx_dv : std_logic := '0';
-   signal o_addr : std_logic_vector(9 downto 0) := (others => '0');
+   signal o_addr : std_logic_vector(10 downto 0) := (others => '0');
    signal o_done : std_logic := '0';
 
  	--Outputs
@@ -315,13 +315,13 @@ BEGIN
 		-- wait for trigger propagate
 		wait for clk_period*8;
 		
-		o_addr <= "0000000000";
+		o_addr <= "00000000000";
 		wait for clk_period;
-		o_addr <= "0000000001";
+		o_addr <= "00000000001";
 		wait for clk_period;
-		o_addr <= "0000000011";
+		o_addr <= "00000000011";
 		wait for clk_period;
-		o_addr <= "0000000100";
+		o_addr <= "00000000100";
 		wait for clk_period;
 		
 		o_done <= '1';
