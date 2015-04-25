@@ -24,18 +24,6 @@ entity etherx is
 end etherx;
 
 architecture Behavioral of etherx is
-
-	COMPONENT netrxram
-	  PORT (
-		 clka : IN STD_LOGIC;
-		 wea : IN STD_LOGIC_VECTOR(0 DOWNTO 0);
-		 addra : IN STD_LOGIC_VECTOR(10 DOWNTO 0);
-		 dina : IN STD_LOGIC_VECTOR(7 DOWNTO 0);
-		 clkb : IN STD_LOGIC;
-		 addrb : IN STD_LOGIC_VECTOR(10 DOWNTO 0);
-		 doutb : OUT STD_LOGIC_VECTOR(7 DOWNTO 0)
-	  );
-	END COMPONENT;
 	
    COMPONENT trigger
    PORT( IN_D	:	IN	STD_LOGIC; 
@@ -53,6 +41,9 @@ architecture Behavioral of etherx is
 		crc_out : OUT std_logic_vector(31 downto 0)
 		);
 	END COMPONENT;
+	
+	type frame_memory_type is array (0 to 1535) of std_logic_vector(7 downto 0);
+	signal frame_memory : frame_memory_type;
 
 	type state_type is (IDLE, RECEIVING, WAITING, DONE);
 	signal state, next_state: state_type;
@@ -72,16 +63,25 @@ architecture Behavioral of etherx is
 	signal crc_valid : std_logic;
 begin
 	
-	ram : netrxram
-	PORT MAP (
-		 clka => rx_clk,
-		 wea => write_enable,
-		 addra => write_addr,
-		 dina => rx_byte,
-		 clkb => clk,
-		 addrb => o_addr,
-		 doutb => o_data
-	);
+-- frame memory signals
+
+	process(rx_clk)
+	begin
+		if rx_clk'event and rx_clk = '1' then
+			if write_enable(0) = '1' then
+				frame_memory(to_integer(unsigned(write_addr))) <= rx_byte;
+			end if;
+		end if;
+	end process;
+	
+	process(clk)
+	begin
+		if clk'event and clk = '1' then
+			o_data <= frame_memory(to_integer(unsigned(o_addr)));
+		end if;
+	end process;
+
+-- crc block
   
 	Inst_crc: crc 
 	PORT MAP(
