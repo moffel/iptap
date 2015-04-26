@@ -18,9 +18,19 @@ void main()
 	state.StopBits = 1;
 	SetCommState(hCom, &state);
 
-	unsigned counter = 0;
 	unsigned char data[64] = {};
 	DWORD read;
+
+#if 1
+
+	while (ReadFile(hCom, data, 1, &read, NULL))
+	{
+		putchar(*data);
+	}
+
+#else
+
+	unsigned counter = 0;
 	while (ReadFile(hCom, data, sizeof(data), &read, NULL))
 	{
 		printf("%4i:\t", counter++);
@@ -33,5 +43,7 @@ void main()
 		}
 		puts("");
 	}
+
+#endif
 }
 

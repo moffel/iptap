@@ -1,0 +1,23 @@
+
+LED	   	   DSOUT	$80
+SERIAL	   DSOUT	$40
+
+load s0, 0
+load s1, 0
+load s2, 0
+
+loop:
+
+add	 s0, 1
+addc s1, 0
+jump NC, loop
+
+addc s2, 0
+out	 s2, LED
+
+jump NC, loop
+load s9, 43
+out	 s9, SERIAL
+
+jump loop
+
