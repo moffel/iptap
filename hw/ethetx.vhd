@@ -52,6 +52,7 @@ architecture Behavioral of ethetx is
 	signal frame_sent_trigger : std_logic;
 	
 	signal counter : std_logic_vector(11 downto 0); -- counter counts nibbles not bytes
+	signal next_counter : std_logic_vector(11 downto 0);
 	
 	type frame_memory_type is array(0 to 1535) of std_logic_vector(7 downto 0);
 	signal frame_memory : frame_memory_type;
@@ -112,6 +113,8 @@ begin
 	tx_crc_rst <= '1' when state = PREAMBLE else '0';
 
 -- fsm
+	next_counter <= std_logic_vector(unsigned(counter) + 1);
+	frame_sent_trigger <= '1' when state = WAITING and next_state = IDLE else '0';
 
 	process(tx_clk, rst)
 	begin
@@ -123,7 +126,7 @@ begin
 			state <= next_state;
 			
 			if state = next_state then
-				counter <= std_logic_vector(unsigned(counter) + 1);
+				counter <= next_counter;
 			else
 				counter <= (others => '0');
 			end if;
@@ -150,7 +153,7 @@ begin
 				end if;
 				
 			when DATA =>
-				if counter = frame_addr & '1' then
+				if std_logic_vector(unsigned(counter)+2) = frame_addr & '1' then
 					next_state <= CHECKSUM;
 				end if;
 				
