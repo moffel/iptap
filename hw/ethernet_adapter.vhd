@@ -126,7 +126,7 @@ begin
 	pi_read_byte 	<= port_read when port_addr(0) = '0' else '0';
 	pi_read_status <= port_read when port_addr(0) = '1' else '0';
 	
-	port_out_data	<= rx_data when pi_read_byte = '1' else
+	port_out_data	<= rx_data when port_addr(0) = '0' else
 							po_data_valid & po_tx_busy & "000000";
 	
 	process(clk, rst)
@@ -140,12 +140,6 @@ begin
 			
 			if port_write = '1' and port_addr = "010" then
 				pi_reset <= port_in_data(0);
-			end if;
-			
-			if port_write = '1' and port_addr = "001" then
-				pi_send_byte <= '1';
-			else
-				pi_send_byte <= '0';
 			end if;
 			
 			if rx_ready = '1' then

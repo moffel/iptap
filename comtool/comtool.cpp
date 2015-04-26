@@ -21,7 +21,7 @@ void main()
 	unsigned char data[64] = {};
 	DWORD read;
 
-#if 1
+#if 0
 
 	while (ReadFile(hCom, data, 1, &read, NULL))
 	{

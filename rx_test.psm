@@ -1,0 +1,53 @@
+
+LED	   	   DSOUT	$80
+SERIAL	   DSOUT	$40
+
+NET_READ   DSIN		$00
+NET_STATUS DSIN		$01
+
+NET_WRITE  DSOUT	$01
+NET_CTRL   DSOUT	$02
+
+; init network
+load   s0, $01
+out	   s0, NET_CTRL	   ; reset
+out	   s0, LED
+load   s0, 16
+call   long_nop
+load   s0, 0
+out	   s0, NET_CTRL   ; unreset
+out	   s0, LED
+
+
+; begin
+loop:
+in	 s9, NET_STATUS
+out	 s9, LED
+test s9, $80
+jump Z, loop ; wait for input
+
+; read 64b input and output to serial port
+load   s2, 64
+read_loop:
+in	   s1, NET_READ
+out	   s1, SERIAL
+out	   s1, LED
+load   s0, 255
+call   long_nop
+sub	   s2, 1
+jump   NZ, read_loop
+
+load   s0, $02
+out	   s0, NET_CTRL
+jump loop
+
+
+long_nop:
+load	 sF, 255
+long_nop_loop:
+sub		 s0, 1
+subc	 sF, 0
+jump	 NZ, long_nop_loop
+ret
+
+

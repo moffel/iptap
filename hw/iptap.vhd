@@ -19,6 +19,14 @@ use IEEE.NUMERIC_STD.ALL;
 entity iptap is
     Port (	clk,rst : in std_logic;
 				
+				E_NRST : out std_logic;
+				E_RXD : in std_logic_vector (3 downto 0);
+				E_RX_DV : in std_logic;
+				E_RX_CLK : in std_logic;
+				E_TXD : out std_logic_vector(3 downto 0);
+				E_TX_EN : out std_logic;
+				E_TX_CLK : in std_logic;
+
 				led : out std_logic_vector(7 downto 0);
 				s_tx : out std_logic
 	 );
@@ -63,17 +71,38 @@ architecture Behavioral of iptap is
 		);
 	END COMPONENT;
 
+	COMPONENT ethernet_adapter
+	PORT(
+		clk : IN std_logic;
+		rst : IN std_logic;
+		port_in_data : IN std_logic_vector(8 downto 0);
+		port_addr : IN std_logic_vector(2 downto 0);
+		port_read : IN std_logic;
+		port_write : IN std_logic;
+		tx_clk : IN std_logic;
+		rx_clk : IN std_logic;
+		rx_d : IN std_logic_vector(3 downto 0);
+		rx_dv : IN std_logic;          
+		port_out_data : OUT std_logic_vector(7 downto 0);
+		tx_d : OUT std_logic_vector(3 downto 0);
+		tx_dv : OUT std_logic;
+		xx_rst : OUT std_logic
+		);
+	END COMPONENT;
+
 	signal instruction_address : std_logic_vector(9 downto 0);
 	signal instruction : std_logic_vector(17 downto 0);
 
-	signal port_write : std_logic;
+	signal port_write, port_read : std_logic;
 	signal port_out : std_logic_vector(7 downto 0);
 	signal port_id : std_logic_vector(7 downto 0);
 	
 	signal uart_write : std_logic;
 	signal uart_counter : std_logic_vector(8 downto 0);
 	signal uart_baud16 : std_logic;
-
+	
+	signal net_input : std_logic_vector(8 downto 0);
+	signal net_output : std_logic_vector(7 downto 0);
 begin
 
 	Inst_kcpsm3: kcpsm3 PORT MAP(
@@ -82,8 +111,8 @@ begin
 		port_id => port_id,
 		write_strobe => port_write,
 		out_port => port_out,
---		read_strobe => ,
-		in_port => (others => '0'),
+		read_strobe => port_read,
+		in_port => net_output,
 		interrupt => '0',
 --		interrupt_ack => ,
 		reset => rst,
@@ -108,6 +137,25 @@ begin
 	);
 
 	uart_write <= port_id(6) when port_write = '1' else '0';
+	
+	Inst_ethernet_adapter: ethernet_adapter PORT MAP(
+		clk => clk,
+		rst => rst,
+		port_in_data => net_input,
+		port_out_data => net_output,
+		port_addr => port_id(2 downto 0),
+		port_read => port_read,
+		port_write => port_write,
+		tx_clk => E_TX_CLK,
+		tx_d => E_TXD,
+		tx_dv => E_TX_EN,
+		rx_clk => E_RX_CLK,
+		rx_d => E_RXD,
+		rx_dv => E_RX_DV,
+		xx_rst => E_NRST
+	);
+
+	net_input <= port_id(3) & port_out;
 	
 	process(clk, rst)
 	begin
