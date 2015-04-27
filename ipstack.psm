@@ -1,7 +1,24 @@
 
-net	   DSIN	 $01, "net_input.txt"
-neto   DSOUT $01, "net_output.txt"
+; hardware definitions
+NET_READ   			 DSIN	 $00, "net_input.txt"
+NET_STATUS	   		 DSIN	 $01, "net_status.txt"
+NET_WRITE	   		 DSOUT	 $01, "net_output.txt"
+NET_CTRL			 DSOUT	 $02, "net_ctrl.txt"
 
+NET_CTRL_RST   		 EQU	 $01  ; reset network hardware (has to set high for some time)
+NET_CTRL_READ_DONE	 EQU	 $02  ; notify adapter to receive the next packet
+NET_CTRL_SEND_FRAME	 EQU	 $04  ; send frame to wire
+NET_CTRL_CS_BEGIN	 EQU	 $08  ; begin calculating IP checksum
+NET_CTRL_CS_SETADDR	 EQU	 $10  ; set address to store checksum to
+NET_CTRL_CS_END		 EQU	 $20  ; store checksum
+
+NET_STATUS_RX_VALID	 EQU	 $80  ; frame received and available for reading
+NET_STATUS_TX_BUSY	 EQU	 $40  ; tx unit is busy transmitting the last frame
+
+LED					 DSOUT $80
+SERIAL				 DSOUT $40
+
+; constants
 tcp_port	   EQU	 80
 stack  		   EQU   $33 ; first free stack byte
 
@@ -59,17 +76,25 @@ store	s0, tcp_state
 
 load	sF, stack
 
-BEGIN:
+jump	NEXT_PACKET_WAIT_LOOP  ; skip read done ctrl for first packet
+NEXT_PACKET:
+load	s0, NET_CTRL_READ_DONE
+out		s0, NET_CTRL
+NEXT_PACKET_WAIT_LOOP:
+in		s0, NET_STATUS
+test	s0, NET_STATUS_RX_VALID
+jump	Z, NEXT_PACKET_WAIT_LOOP
+
 ; read mac to mem
 load  s0, 12
 load  s1, dmac
 call READ_NET
 
 ; read frame type. 0800 = IPv4, 0806 = ARP
-in     s0, net
+in     s0, NET_READ
 comp   s0, 8
 jump   NZ, NEXT_PACKET
-in     s0, net
+in     s0, NET_READ
 comp   s0, 0
 jump   Z, IP
 comp   s0, 6
@@ -86,7 +111,7 @@ ARP:
 load   s0, 7
 load   s1, arp_static
 call   READ_NET
-in	   s0, net
+in	   s0, NET_READ
 comp   s0, 1  	 ; arp request
 jump   NZ, NEXT_PACKET
 
@@ -112,13 +137,16 @@ load   s0, 7
 load   s1, arp_static
 call   WRITE_NET	 ; first static 7b of arp packet
 load   s0, 2
-out	   s0, net		 ; arp type 2 == reply
+out	   s0, NET_WRITE	 ; arp type 2 == reply
 load   s0, 10
 load   s1, mymac	
 call   WRITE_NET	 ; arp source mac and ip
 load   s0, 10
 load   s1, arp_source
 call   WRITE_NET	 ; arp target mac and ip
+
+load   s0, NET_CTRL_SEND_FRAME
+out	   s0, NET_CTRL
 jump   NEXT_PACKET	 ; done
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -127,18 +155,18 @@ jump   NEXT_PACKET	 ; done
 ; sE: header size
 ; sC, sD: payload size
 IP:
-in     sE, net ; read and extract packet header size
+in     sE, NET_READ ; read and extract packet header size
 and	   sE, $F
 sl0	   sE
 sl0	   sE  	   ; len *= 4
-in	   s0, net ; ignored
-in	   sC, net
-in	   sD, net
+in	   s0, NET_READ ; ignored
+in	   sC, NET_READ
+in	   sD, NET_READ
 sub	   sD, sE
 subc   sC, 0   ; payload len = total len - header len
 load   s0, 5
 call   SKIP_NET ; ignore 5 bytes
-in	   sA, net	; read protocol number
+in	   sA, NET_READ	; read protocol number
 load   s0, 2
 call   SKIP_NET ; ignore checksum
 load   s0, 4
@@ -165,7 +193,7 @@ jump   NEXT_PACKET	 ; unknown layer 4 protocol
 IP_ICMP:
 comp	sC, 0
 jump	NZ, NEXT_PACKET	; drop packets larger than 255 bytes
-in		s0, net
+in		s0, NET_READ
 comp	s0, 8  		   ; icmp echo = 8
 jump	NZ, NEXT_PACKET
 load	s0, 3
@@ -178,17 +206,27 @@ load	s7, sD	 	   	; reply package has same payload length as request
 call	WRITE_IP_HEAD
 
 ; write ICMP packet
-out		s3, net	 	 ; ICMP type 0 = echo reply
-out		s3, net		 ; ICMP code
-out		s3, net
-out		s3, net		 ; ICMP checksum
-sub		sD, 4		 ; payload size = icmp packet size - 4b for echo header
+load	s0, NET_CTRL_CS_BEGIN
+out		s0, NET_CTRL
+load	s3, 0
+out		s3, NET_WRITE	 	 ; ICMP type 0 = echo reply
+out		s3, NET_WRITE		 ; ICMP code
+
+load	s0, NET_CTRL_CS_SETADDR
+out		s0, NET_CTRL
+out		s3, NET_WRITE
+out		s3, NET_WRITE		 ; ICMP checksum
+sub		sD, 4		 		 ; payload size = icmp packet size - 4b for echo header
 IP_ICMP_ECHO_LOOP:
-in		s0, net
-out		s0, net
+in		s0, NET_READ
+out		s0, NET_WRITE
 sub		sD, 1
 jump	NZ, IP_ICMP_ECHO_LOOP
 
+load	s0, NET_CTRL_CS_END
+out		s0, NET_CTRL
+load	s0, NET_CTRL_SEND_FRAME
+out		s0, NET_CTRL
 jump   NEXT_PACKET; done
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -197,16 +235,16 @@ IP_TCP:
 load   s0, 3			; read two bytes and skip one
 load   s1, tcp_sport
 call   READ_NET			; read source port for reply
-in	   s0, net
+in	   s0, NET_READ
 comp   s0, tcp_port
 jump   NZ, NEXT_PACKET	; compare destination port to our port number (80)
 load   s0, 8
 load   s1, tcp_seq
 call   READ_NET	  		; read seq and ack number
-in	   s4, net			; read data offset
+in	   s4, NET_READ		; read data offset
 sr0	   s4
 sr0	   s4
-in	   s5, net			; read flags
+in	   s5, NET_READ		; read flags
 fetch  s0, tcp_state
 comp   s0, 0
 jump   Z, TCP_LISTEN
@@ -264,6 +302,11 @@ load	s6, 0
 load	s7, 0			; no payload
 load	s8, $12			; ACK, SYN
 call	WRITE_TCP_HEAD
+
+load	s1, NET_CTRL_CS_END
+out		s1, NET_CTRL
+load	s1, NET_CTRL_SEND_FRAME
+out		s1, NET_CTRL
 jump	TCP_NEXT_STATE	; nop
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -293,12 +336,19 @@ call	WRITE_TCP_HEAD
 ECHO_LOOP:
 load	s0, s6
 or		s0, s7
-jump	Z, NEXT_PACKET
-in		s0, net
-out		s0, neto
+jump	Z, HTTP_PARSE_SEND_PACKET
+in		s0, NET_READ
+out		s0, NET_WRITE
 sub		s7, 1
 subc	s6, 0
 jump	ECHO_LOOP
+
+HTTP_PARSE_SEND_PACKET:
+load	s1, NET_CTRL_CS_END
+out		s1, NET_CTRL
+load	s1, NET_CTRL_SEND_FRAME
+out		s1, NET_CTRL
+jump	NEXT_PACKET
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; s0!, s1!, s2!, s3!, s4!, s5!
@@ -309,10 +359,14 @@ load	s5, 6			; tcp
 add		s7, 20			; add tcp header size
 addc	s6, 0
 call	WRITE_IP_HEAD
+
+load	s1, NET_CTRL_CS_BEGIN
+out		s1, NET_CTRL
+
 load	s5, 0
-out		s5, neto
+out		s5, NET_WRITE
 load	s0, tcp_port
-out		s0, neto	 	; source port
+out		s0, NET_WRITE	 	; source port
 load	s0, 2
 load	s1, tcp_sport
 call	WRITE_NET	 	; destination port
@@ -329,24 +383,28 @@ add		s3, 1
 addc	s2, 0
 addc	s1, 0
 addc	s0, 0
-out		s0, neto
-out		s1, neto
-out		s2, neto
-out		s3, neto
+out		s0, NET_WRITE
+out		s1, NET_WRITE
+out		s2, NET_WRITE
+out		s3, NET_WRITE
 store	s3, tcp_peer
 
 load	s0, $50
-out		s0, neto	; header size
-out		s8, neto	; tcp flags
+out		s0, NET_WRITE	; header size
+out		s8, NET_WRITE	; tcp flags
 load	s0, 2
-out		s0, neto
+out		s0, NET_WRITE
 load	s0, 128
-out		s0, neto	; 640b window size
+out		s0, NET_WRITE	; 640b window size
 load	s0, 0
-out		s0, neto
-out		s0, neto	; checksum
-out		s0, neto
-out		s0, neto	; urgent pointer
+out		s0, NET_WRITE
+
+load	s1, NET_CTRL_CS_SETADDR
+out		s1, NET_CTRL
+out		s0, NET_WRITE	; checksum
+out		s0, NET_WRITE
+
+out		s0, NET_WRITE	; urgent pointer
 ret
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -357,37 +415,50 @@ WRITE_IP_HEAD:
 load    s4, 0 ; IP protocol id
 call    WRITE_ETHERNET
 
+load	s0, NET_CTRL_CS_BEGIN
+out		s0, NET_CTRL
 load	s0, $45
-out		s0, net	 	 ; ip version and header size
+out		s0, NET_WRITE	 	 ; ip version and header size
 load	s3, 0
-out		s3, net		 ; DSCP, ECN
+out		s3, NET_WRITE		 ; DSCP, ECN
 add		s7, 20
 addc	s6, 0
-out		s6, net
-out		s7, net		 ; total length (header + payload)
+out		s6, NET_WRITE
+out		s7, NET_WRITE		 ; total length (header + payload)
 load	s0, $55
-out		s0, net
-out		s0, net		 ; IP identification
-out		s3, net		 ; flags
-out		s3, net		 ; fragment offset
+out		s0, NET_WRITE
+out		s0, NET_WRITE		 ; IP identification
+out		s3, NET_WRITE		 ; flags
+out		s3, NET_WRITE		 ; fragment offset
 load	s0, 128		
-out		s0, net		 ; TTL
+out		s0, NET_WRITE		 ; TTL
 load	s0, 1
-out		s5, net		 ; protocol
-out		s3, net
-out		s3, net		 ; checksum
+out		s5, NET_WRITE		 ; protocol
+
+load	s0, NET_CTRL_CS_SETADDR
+out		s0, NET_CTRL
+out		s3, NET_WRITE
+out		s3, NET_WRITE		 ; checksum
+
 load	s0, 4
 load	s1, myip
 call	WRITE_NET	 ; source ip
 load	s0, 4
 load	s1, ip_saddr ; destination ip
 call	WRITE_NET
+
+load	s0, NET_CTRL_CS_END
+out		s0, NET_CTRL
 ret
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 WRITE_ETHERNET:
 ; s0!, s1!, s2!
 ; s4 - protocol low byte (0 = IP, 6 = ARP)
+in	   s0, NET_STATUS
+test   s0, NET_STATUS_TX_BUSY
+jump   NZ, WRITE_ETHERNET	  	  ; wait until network adapter is ready for new frame
+
 load   s0, 6
 load   s1, smac	
 call   WRITE_NET	 ; destination mac
@@ -395,8 +466,8 @@ load   s0, 6
 load   s1, mymac
 call   WRITE_NET	 ; source mac
 load   s0, 8
-out	   s0, net		 ; protocol type high
-out	   s4, net		 ; protocol type low
+out	   s0, NET_WRITE		 ; protocol type high
+out	   s4, NET_WRITE		 ; protocol type low
 ret
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -406,7 +477,7 @@ SKIP_NET:
 comp  	s0, 0
 SKIP_NET_LOOP:
 ret		Z
-in		s1, net
+in		s1, NET_READ
 sub		s0, 1
 jump	SKIP_NET_LOOP
 
@@ -415,7 +486,7 @@ READ_NET:
 ; s0! - bytes to read
 ; s1! - address to store to (s1 + s0 after execution)
 ; s2!
-in	  	s2, net
+in	  	s2, NET_READ
 store	s2, s1
 add		s1, 1
 sub		s0, 1
@@ -428,7 +499,7 @@ WRITE_NET:
 ; s1! - address to load from (s1 + s0 after execution)
 ; s2!
 fetch 	s2, s1
-out		s2, neto
+out		s2, NET_WRITE
 add		s1, 1
 sub		s0, 1
 jump	NZ, WRITE_NET
@@ -443,7 +514,7 @@ COMPARE_NET:
 ; s4!
 load  	s2, 3
 COMPARE_NET_LOOP:
-in	  	s3, net
+in	  	s3, NET_READ
 comp	s3, $FF
 jump	Z, COMPARE_NET_TEST
 and		s2, $FD ; ~2
@@ -459,7 +530,5 @@ jump	NZ, COMPARE_NET_LOOP
 ret
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-NEXT_PACKET:
-jump	NEXT_PACKET
 
 
