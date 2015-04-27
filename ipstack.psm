@@ -1,9 +1,9 @@
 
 ; hardware definitions
-NET_READ   			 DSIN	 $00, "net_input.txt"
-NET_STATUS	   		 DSIN	 $01, "net_status.txt"
-NET_WRITE	   		 DSOUT	 $01, "net_output.txt"
-NET_CTRL			 DSOUT	 $02, "net_ctrl.txt"
+NET_READ   			 DSIN	 $00 ;, "net_input.txt"
+NET_STATUS	   		 DSIN	 $01 ;, "net_status.txt"
+NET_WRITE	   		 DSOUT	 $01 ;, "net_output.txt"
+NET_CTRL			 DSOUT	 $02 ;, "net_ctrl.txt"
 
 NET_CTRL_RST   		 EQU	 $01  ; reset network hardware (has to set high for some time)
 NET_CTRL_READ_DONE	 EQU	 $02  ; notify adapter to receive the next packet
@@ -45,16 +45,20 @@ mymac  		   EQU	 $36
 myip   		   EQU	 $3C
 
 ; simulator is buggy. first port read is always zero
-in	  s0, net
+;in	  s0, NET_READ
+
+; start to reset ethernet adapter
+load	s0, NET_CTRL_RST
+out		s0, NET_CTRL
 
 ; store my ip and mac in memory
-load	s0, 192
+load	s0, 10
 store	s0, myip
-load	s0, 168
+load	s0, 0
 store	s0, myip + 1
-load	s0, 2
+load	s0, 0
 store	s0, myip + 2
-load	s0, 153
+load	s0, 2
 store	s0, myip + 3
 load	s0, $80
 store	s0, mymac
@@ -75,6 +79,9 @@ store	s0, tcp_peer
 store	s0, tcp_state
 
 load	sF, stack
+
+load	s0, 0	 	  ; stop ethernet adapter reset
+out		s0, NET_CTRL
 
 jump	NEXT_PACKET_WAIT_LOOP  ; skip read done ctrl for first packet
 NEXT_PACKET:
