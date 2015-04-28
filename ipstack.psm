@@ -152,6 +152,13 @@ load   s0, 10
 load   s1, arp_source
 call   WRITE_NET	 ; arp target mac and ip
 
+load   s1, 18
+load   s0, 0
+ARP_PADDING_LOOP:
+out		s0, NET_WRITE
+sub		s1, 1
+jump	NZ, ARP_PADDING_LOOP
+
 load   s0, NET_CTRL_SEND_FRAME
 out	   s0, NET_CTRL
 jump   NEXT_PACKET	 ; done
