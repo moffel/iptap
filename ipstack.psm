@@ -26,7 +26,7 @@ stack  		   EQU   $33 ; first free stack byte
 dmac   		   EQU	 $00
 smac   		   EQU	 $06
 
-; variables used for arp replies
+; variables used for replies
 arp_static	   EQU	 $10 ; 7b
 arp_source	   EQU	 $17 ; 10b
 
@@ -152,12 +152,8 @@ load   s0, 10
 load   s1, arp_source
 call   WRITE_NET	 ; arp target mac and ip
 
-load   s1, 18
-load   s0, 0
-ARP_PADDING_LOOP:
-out		s0, NET_WRITE
-sub		s1, 1
-jump	NZ, ARP_PADDING_LOOP
+load   s0, 18		 ; add 18 zero bytes for minimum frame length padding
+call   WRITE_NET_ZERO
 
 load   s0, NET_CTRL_SEND_FRAME
 out	   s0, NET_CTRL
@@ -419,7 +415,13 @@ out		s0, NET_WRITE	; checksum
 out		s0, NET_WRITE
 
 out		s0, NET_WRITE	; urgent pointer
-ret
+
+load	s0, s6
+or		s0, s7
+ret		NZ	  			; no auto padding for non empty packets
+load	s0, 6
+jump	WRITE_NET_ZERO
+; reuse return from write_net_zero
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 WRITE_IP_HEAD:
@@ -518,6 +520,18 @@ add		s1, 1
 sub		s0, 1
 jump	NZ, WRITE_NET
 ret
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+WRITE_NET_ZERO:
+; s0! - bytes to write
+; s1!
+load    s1, 0
+comp	s0, 0
+WRITE_NET_ZERO_LOOP:
+ret		Z
+out		s1, NET_WRITE
+sub		s0, 1
+jump	WRITE_NET_ZERO_LOOP
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 COMPARE_NET:
