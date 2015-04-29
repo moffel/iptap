@@ -82,6 +82,7 @@ load	sF, stack
 
 load	s0, 0	 	  ; stop ethernet adapter reset
 out		s0, NET_CTRL
+eint
 
 jump	NEXT_PACKET_WAIT_LOOP  ; skip read done ctrl for first packet
 NEXT_PACKET:
@@ -561,4 +562,8 @@ ret
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+isp:
+reti enable
 
+ORG $3FF
+jump isp
