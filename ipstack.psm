@@ -87,6 +87,8 @@ jump	NEXT_PACKET_WAIT_LOOP  ; skip read done ctrl for first packet
 NEXT_PACKET:
 load	s0, NET_CTRL_READ_DONE
 out		s0, NET_CTRL
+fetch	s0, tcp_state
+out		s0, LED		 		   ; debug tcp state
 NEXT_PACKET_WAIT_LOOP:
 in		s0, NET_STATUS
 test	s0, NET_STATUS_RX_VALID
