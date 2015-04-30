@@ -291,6 +291,9 @@ load   s1, TCP_PEER_IP
 load   s2, 6
 call   MEM_CMP		  	  ; compare source ip and port to connected peer
 jump   NZ, NEXT_PACKET	  
+load   s2, 4			  ; s0 and s1 are set by last cmp call
+call   MEM_CMP
+jump   NZ, TCP_RESET_STATE ; unexpected sequence number (TODO: request resend)
 
 load   s2, 0
 store  s2, TCP_TIMEOUT
@@ -337,7 +340,7 @@ fetch	s3, tcp_seq + 3
 xor		s0, $55
 xor		s1, $A7
 xor		s2, $48
-xor		s3, $87		   		  ; some renadom keys for randomisation
+xor		s3, $87		   		  ; some random keys for randomisation (very insecure)
 store	s0, tcp_ack
 store	s1, tcp_ack + 1
 store	s2, tcp_ack + 2
@@ -428,7 +431,7 @@ load	s0, 4
 load	s1, myip
 call	WRITE_NET	 ; source ip
 load	s0, 4
-load	s1, ip_saddr ; destination ip
+load	s1, TCP_PEER_IP ; destination ip
 call	WRITE_NET
 load	s0, 0
 load	s1, 6
@@ -444,17 +447,17 @@ out		s5, NET_WRITE
 load	s0, tcp_port
 out		s0, NET_WRITE	 	; source port
 load	s0, 2
-load	s1, tcp_sport
+load	s1, TCP_PEER_PORT
 call	WRITE_NET	 	; destination port
 load	s0, 4
 load	s1, tcp_ack
 call	WRITE_NET  		; send received ack as sequence (may be changed)
 
 ; calc ack number
-fetch   s0, tcp_seq
-fetch   s1, tcp_seq + 1
-fetch   s2, tcp_seq + 2
-fetch   s3, tcp_seq + 3
+fetch   s0, TCP_PEER_R_SEQ
+fetch   s1, TCP_PEER_R_SEQ + 1
+fetch   s2, TCP_PEER_R_SEQ + 2
+fetch   s3, TCP_PEER_R_SEQ + 3
 test	s8, 2		   	; +1 if syn is set
 addc	s3, sD			; increment sequence number by number of bytes received
 addc	s2, sC			
@@ -464,6 +467,10 @@ out		s0, NET_WRITE
 out		s1, NET_WRITE
 out		s2, NET_WRITE
 out		s3, NET_WRITE
+store   s0, TCP_PEER_R_SEQ
+store   s1, TCP_PEER_R_SEQ + 1
+store   s2, TCP_PEER_R_SEQ + 2
+store   s3, TCP_PEER_R_SEQ + 3
 
 load	s0, $50
 out		s0, NET_WRITE	; header size
