@@ -13,7 +13,7 @@ use IEEE.NUMERIC_STD.ALL;
 
 -- write ports:
 -- 001: send data byte
--- 010: net crtl ( 0-reset, 1-read done, 2-send frame, 3-checksum_begin, 4-checksum_setaddr, 5-checksum_end )
+-- 010: net crtl ( 0-reset, 1-read done, 2-send frame, 3-checksum_begin, 4-checksum_setaddr, 5-checksum_end, 6-checksum_only )
 -- 100: set filter0 byte
 -- 101: set filter1 byte
 
@@ -78,6 +78,7 @@ architecture Behavioral of ethernet_adapter is
 		rst : IN std_logic;
 		send_data : IN std_logic_vector(7 downto 0);
 		send_data_valid : IN std_logic;
+		send_data_pass : in std_logic;
 		cs_begin : IN std_logic;
 		cs_setaddr : IN std_logic;
 		cs_end : IN std_logic;
@@ -101,6 +102,7 @@ architecture Behavioral of ethernet_adapter is
 	signal pi_read_byte : std_logic;
 	
 	signal pi_reset : std_logic; -- registered input port
+	signal pi_checksum_mode : std_logic; -- registered input port
 	signal pi_read_done : std_logic;
 	signal pi_cs_begin : std_logic;
 	signal pi_cs_setaddr : std_logic;
@@ -138,6 +140,7 @@ begin
 			
 			if port_write = '1' and port_addr = "010" then
 				pi_reset <= port_in_data(0);
+				pi_checksum_mode <= not port_in_data(6);
 			end if;
 			
 			if rx_ready = '1' then
@@ -198,6 +201,7 @@ begin
 		rst => pi_reset,
 		send_data => port_in_data(7 downto 0),
 		send_data_valid => pi_send_byte,
+		send_data_pass => pi_checksum_mode,
 		cs_begin => pi_cs_begin,
 		cs_setaddr => pi_cs_setaddr,
 		cs_end => pi_cs_end,

@@ -15,6 +15,7 @@ entity ipchecksum is
 				
 				send_data : in std_logic_vector(7 downto 0);
 				send_data_valid : in std_logic;
+				send_data_pass : in std_logic;
 				cs_begin : in std_logic;
 				cs_setaddr : in std_logic;
 				cs_end : in std_logic;
@@ -47,7 +48,7 @@ begin
 	frame_addr <=	address when state = "00" else
 						checksum_address & state(1);
 						
-	frame_data_valid <=	send_data_valid when state = "00" else
+	frame_data_valid <=	send_data_valid and send_data_pass when state = "00" else
 								'1';
 	
 	add <=	x"0000" when cs_end = '1' else
@@ -69,7 +70,9 @@ begin
 
 			if send_data_valid = '1' then
 				nibble <= not nibble;
-				address <= std_logic_vector(unsigned(address) + 1);
+				if send_data_pass = '1' then
+					address <= std_logic_vector(unsigned(address) + 1);
+				end if;
 			end if;
 			
 			if cs_begin = '1' then

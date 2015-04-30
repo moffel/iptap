@@ -11,6 +11,7 @@ NET_CTRL_SEND_FRAME	 EQU	 $04  ; send frame to wire
 NET_CTRL_CS_BEGIN	 EQU	 $08  ; begin calculating IP checksum
 NET_CTRL_CS_SETADDR	 EQU	 $10  ; set address to store checksum to
 NET_CTRL_CS_END		 EQU	 $20  ; store checksum
+NET_CTRL_CS_ONLY	 EQU	 $40  ; use data for checksum but do not include the data for transfer
 
 NET_STATUS_RX_VALID	 EQU	 $80  ; frame received and available for reading
 NET_STATUS_TX_BUSY	 EQU	 $40  ; tx unit is busy transmitting the last frame
@@ -373,8 +374,27 @@ add		s7, 20			; add tcp header size
 addc	s6, 0
 call	WRITE_IP_HEAD
 
-load	s1, NET_CTRL_CS_BEGIN
+load	s1, NET_CTRL_CS_BEGIN | NET_CTRL_CS_ONLY
 out		s1, NET_CTRL
+;;;;;;;; pseudo header
+load	s0, 4
+load	s1, myip
+call	WRITE_NET	 ; source ip
+load	s0, 4
+load	s1, ip_saddr ; destination ip
+call	WRITE_NET
+load	s0, 0
+load	s1, 6
+out		s0, NET_WRITE
+out		s1, NET_WRITE  ; protocol
+load	s2, s6
+load	s3, s7
+sub		s3, 20
+subc	s2, 0
+out		s2, NET_WRITE
+out		s3, NET_WRITE  ; TCP head + data byte length
+out		s0, NET_CTRL
+;;;;;;;;
 
 load	s5, 0
 out		s5, NET_WRITE
@@ -419,8 +439,9 @@ out		s0, NET_WRITE	; checksum
 out		s0, NET_WRITE
 out		s0, NET_WRITE	; urgent pointer
 
-load	s0, s6
-or		s0, s7
+comp	s6, 0
+ret		NZ
+comp	s7, 40
 ret		NZ	  			; no auto padding for non empty packets
 load	s0, 6
 jump	WRITE_NET_ZERO
