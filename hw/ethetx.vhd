@@ -54,8 +54,10 @@ architecture Behavioral of ethetx is
 	signal counter : std_logic_vector(11 downto 0); -- counter counts nibbles not bytes
 	signal next_counter : std_logic_vector(11 downto 0);
 	
-	type frame_memory_type is array(0 to 1535) of std_logic_vector(7 downto 0);
+	type frame_memory_type is array(0 to 2047) of std_logic_vector(7 downto 0);
 	signal frame_memory : frame_memory_type;
+	signal frame_memory_port : std_logic_vector(7 downto 0);
+	
 	signal tx_byte : std_logic_vector(7 downto 0);
 	signal tx_byte_rev : std_logic_vector(7 downto 0);
 	signal tx_crc : std_logic_vector(31 downto 0);
@@ -72,6 +74,8 @@ begin
 			if frame_write_enable = '1' then
 				frame_memory(to_integer(unsigned(frame_addr))) <= frame_data;
 			end if;
+			
+			frame_memory_port <= frame_memory(to_integer(unsigned(counter(11 downto 1))));
 		end if;
 	end process;
 
@@ -81,7 +85,7 @@ begin
 					not tx_crc_rev(15 downto  8) when state = CHECKSUM and counter(2 downto 1) = "01" else
 					not tx_crc_rev(23 downto 16) when state = CHECKSUM and counter(2 downto 1) = "10" else
 					not tx_crc_rev(31 downto 24) when state = CHECKSUM and counter(2 downto 1) = "11" else
-					frame_memory(to_integer(unsigned(counter(11 downto 1))));
+					frame_memory_port;
 
 	tx_d <=	tx_byte(3 downto 0) when counter(0) = '0' else
 				tx_byte(7 downto 4);
@@ -136,7 +140,7 @@ begin
 	end process;
 
 
-	process(state, send_frame_trigger, counter)
+	process(state, send_frame_trigger, counter, frame_addr)
 	begin
 		next_state <= state;
 	

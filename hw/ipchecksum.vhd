@@ -28,7 +28,8 @@ end ipchecksum;
 
 architecture Behavioral of ipchecksum is
 	
-	signal address, checksum_address : std_logic_vector(10 downto 0);
+	signal address : std_logic_vector(10 downto 0);
+	signal checksum_address : std_logic_vector(10 downto 1); -- assume checksum to be 2b aligned
 	signal sum : std_logic_vector(16 downto 0);
 	signal add : std_logic_vector(15 downto 0);
 	signal nibble : std_logic;
@@ -39,12 +40,12 @@ architecture Behavioral of ipchecksum is
 	
 begin
 
-	frame_data <=	send_data when state = "00" else
-						checksum(15 downto 8) when state = "01" else
-						checksum( 7 downto 0) when state = "10";
+	frame_data <=	checksum(15 downto 8) when state = "01" else
+						checksum( 7 downto 0) when state = "10" else
+						send_data;
 						
 	frame_addr <=	address when state = "00" else
-						checksum_address(10 downto 1) & state(1);
+						checksum_address & state(1);
 						
 	frame_data_valid <=	send_data_valid when state = "00" else
 								'1';
@@ -77,7 +78,7 @@ begin
 			end if;
 						
 			if cs_setaddr = '1' then
-				checksum_address <= address;
+				checksum_address <= address(10 downto 1);
 			end if;
 			
 			if frame_next = '1' then

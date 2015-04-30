@@ -42,7 +42,7 @@ architecture Behavioral of etherx is
 		);
 	END COMPONENT;
 	
-	type frame_memory_type is array (0 to 1535) of std_logic_vector(7 downto 0);
+	type frame_memory_type is array (0 to 2047) of std_logic_vector(7 downto 0);
 	signal frame_memory : frame_memory_type;
 
 	type state_type is (IDLE, RECEIVING, WAITING, DONE);

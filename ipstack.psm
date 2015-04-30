@@ -409,14 +409,14 @@ load	s0, 2
 out		s0, NET_WRITE
 load	s0, 128
 out		s0, NET_WRITE	; 640b window size
-load	s0, 0
-out		s0, NET_WRITE
 
 load	s1, NET_CTRL_CS_SETADDR
 out		s1, NET_CTRL
-out		s0, NET_WRITE	; checksum
+load	s0, 0
 out		s0, NET_WRITE
+out		s0, NET_WRITE	; checksum
 
+out		s0, NET_WRITE
 out		s0, NET_WRITE	; urgent pointer
 
 load	s0, s6

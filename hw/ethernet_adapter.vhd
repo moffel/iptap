@@ -99,7 +99,6 @@ architecture Behavioral of ethernet_adapter is
 	
 	signal pi_send_byte : std_logic;
 	signal pi_read_byte : std_logic;
-	signal pi_read_status : std_logic;
 	
 	signal pi_reset : std_logic; -- registered input port
 	signal pi_read_done : std_logic;
@@ -124,7 +123,6 @@ begin
 	pi_cs_end		<= port_in_data(5) when port_addr = "010" and port_write = '1' else '0';
 
 	pi_read_byte 	<= port_read when port_addr(0) = '0' else '0';
-	pi_read_status <= port_read when port_addr(0) = '1' else '0';
 	
 	port_out_data	<= rx_data when port_addr(0) = '0' else
 							po_data_valid & po_tx_busy & "000000";
