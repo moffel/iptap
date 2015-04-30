@@ -351,15 +351,8 @@ load	s1, ip_saddr
 load	s2, 14
 call	MEM_CPY		   		  ; save peer state for connection tracking
 
-load	s6, 0
-load	s7, 0			; no payload
 load	s8, $12			; ACK, SYN
-call	WRITE_TCP_HEAD
-
-load	s1, NET_CTRL_CS_END
-out		s1, NET_CTRL
-load	s1, NET_CTRL_SEND_FRAME
-out		s1, NET_CTRL
+call	WRITE_TCP_HEAD_EMPTY_AND_SEND
 jump	TCP_NEXT_STATE	; nop
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -378,14 +371,8 @@ jump	NZ, TCP_RESET_STATE_NOT_CONNECTED
 ; we are connected, so we should at least notify our peer about this
 load 	sC, 0
 load	sD, 0		; pretend no incoming payload
-load	s6, 0
-load	s7, 0		; no payload
 load	s8, $14		; ACK, RST
-call	WRITE_TCP_HEAD
-load	s0, NET_CTRL_CS_END
-out		s0, NET_CTRL
-load	s0, NET_CTRL_SEND_FRAME
-out		s0, NET_CTRL
+call	WRITE_TCP_HEAD_EMPTY_AND_SEND
 
 TCP_RESET_STATE_NOT_CONNECTED:
 load	s0, 0
@@ -429,6 +416,23 @@ out		s1, NET_CTRL
 load	s1, NET_CTRL_SEND_FRAME
 out		s1, NET_CTRL
 jump	NEXT_PACKET
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+WRITE_TCP_HEAD_EMPTY_AND_SEND:
+; s8 - tcp flags
+; see WRITE_TCP_HEAD for register usage
+load  	s6, 0
+load	s7, 0
+call	WRITE_TCP_HEAD
+
+load	s0, 6
+call	WRITE_NET_ZERO	 		  ; padd up to 60b minimal frame length
+
+load	s0, NET_CTRL_CS_END
+out		s0, NET_CTRL
+load	s0, NET_CTRL_SEND_FRAME
+out		s0, NET_CTRL
+ret
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; s0!, s1!, s2!, s3!, s4!, s5!
@@ -523,14 +527,7 @@ out		s0, NET_WRITE	; checksum
 
 out		s0, NET_WRITE
 out		s0, NET_WRITE	; urgent pointer
-
-comp	s6, 0
-ret		NZ
-comp	s7, 0
-ret		NZ	  			; no auto padding for non empty packets
-load	s0, 6
-jump	WRITE_NET_ZERO
-; reuse return from write_net_zero
+ret
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 WRITE_IP_HEAD:
