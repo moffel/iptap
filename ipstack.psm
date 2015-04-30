@@ -35,19 +35,23 @@ ip_saddr	   EQU	 $10 ; 4b
 
 ; variables used for tcp
 tcp_sport	   EQU	 $14 ; 2b - source port sent by client
-tcp_seq		   EQU	 $18 ; 4b - sequence number sent by client
-tcp_ack		   EQU	 $1C ; 4b - ack number sent by client
+tcp_seq		   EQU	 $16 ; 4b - sequence number sent by client
+tcp_ack		   EQU	 $1A ; 4b - ack number sent by client
 
-stack  		   EQU   $30 ; first free stack byte
+stack  		   EQU   $23 ; first free stack byte
 ; global variables
-TCP_TIMEOUT	   EQU	 $31
-tcp_peer 	   EQU	 $34 ; hash to identify remote peer
+TCP_PEER_IP	   EQU	 $24 ; 4b - connected ip address
+TCP_PEER_PORT  EQU	 $28 ; 2b - connected port
+TCP_PEER_R_SEQ EQU	 $2A ; 4b - next expected client sequence number (remote)
+TCP_PEER_L_SEQ EQU	 $2E ; 4b - sequence number for next packet (local)
+
+TCP_TIMEOUT	   EQU	 $32 ; 3b - connection timeout
 tcp_state	   EQU	 $35 ; tcp connection state (0 = listen, 1 = syn received, 2 = established)
 mymac  		   EQU	 $36
 myip   		   EQU	 $3C
 
 ; simulator is buggy. first port read is always zero
-;in	  s0, NET_READ
+in	  s0, NET_READ
 
 ; start to reset ethernet adapter
 load	s0, NET_CTRL_RST
@@ -77,7 +81,6 @@ store	s0, mymac + 5
 
 ; initical tcp state
 load	s0, 0
-store	s0, tcp_peer
 store	s0, tcp_state
 
 load	sF, stack
@@ -269,10 +272,10 @@ jump   NZ, NEXT_PACKET	; compare destination port to our port number (80)
 load   s0, 8
 load   s1, tcp_seq
 call   READ_NET	  		; read seq and ack number
-in	   s4, NET_READ		; read data offset
-sr0	   s4
-sr0	   s4
-sub	   sD, s4
+in	   s6, NET_READ		; read data offset
+sr0	   s6
+sr0	   s6
+sub	   sD, s6
 subc   sC, 0 		  ; sub tcp header from ip payload size
 
 in	   s5, NET_READ		; read flags
@@ -283,21 +286,23 @@ jump   Z, TCP_LISTEN
 ; check seq number if not in listen state
 ; this may be due to another connection packet or packet loss
 ; we will have to request a resend in case of packet loss
-fetch  s1, tcp_seq + 3
-fetch  s2, tcp_peer
-comp   s1, s2
+load   s0, ip_saddr
+load   s1, TCP_PEER_IP
+load   s2, 6
+call   MEM_CMP		  	  ; compare source ip and port to connected peer
 jump   NZ, NEXT_PACKET	  
 
 load   s2, 0
 store  s2, TCP_TIMEOUT
 store  s2, TCP_TIMEOUT + 1
-store  s2, TCP_TIMEOUT + 2	; reset timeout
+store  s2, TCP_TIMEOUT + 2	; reset
 
 test   s5, $05
 jump   NZ, TCP_RESET_STATE ; reset connection if RST or FIN set
 test   s5, $10
 jump   Z, TCP_RESET_STATE ; reset connection if no ACK
 
+fetch  s0, tcp_state
 comp   s0, 1
 jump   Z, TCP_SYNSENT
 comp   s0, 2
@@ -306,7 +311,7 @@ jump   NEXT_PACKET
 
 ;; TCP state connected
 TCP_CONNECTED:
-load	s0, s4
+load	s0, s6
 sub		s0, 14		  ; we already read 14b of tcp header
 call	SKIP_NET	  ; skip tcp header
 load	s0, sC
@@ -337,6 +342,11 @@ store	s0, tcp_ack
 store	s1, tcp_ack + 1
 store	s2, tcp_ack + 2
 store	s3, tcp_ack + 3
+
+load	s0, TCP_PEER_IP
+load	s1, ip_saddr
+load	s2, 14
+call	MEM_CPY		   		  ; save peer state for connection tracking
 
 load	s6, 0
 load	s7, 0			; no payload
@@ -454,7 +464,6 @@ out		s0, NET_WRITE
 out		s1, NET_WRITE
 out		s2, NET_WRITE
 out		s3, NET_WRITE
-store	s3, tcp_peer
 
 load	s0, $50
 out		s0, NET_WRITE	; header size
@@ -616,6 +625,36 @@ COMPARE_NET_NEXT:
 add		s1, 1
 sub		s0, 1
 jump	NZ, COMPARE_NET_LOOP
+ret
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+MEM_CPY:
+; s0! - destination address
+; s1! - source address
+; s2! - number of bytes to copy
+; s3!
+fetch 	s3, s1
+store	s3, s0
+add		s0, 1
+add		s1, 1
+sub		s2, 1
+jump	NZ, MEM_CPY
+ret
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+MEM_CMP: ; Zero flag is set if equal
+; s0! - address1
+; s1! - address2
+; s2! - number of bytes to compare
+; s3!, s4!
+fetch 	s3, s0
+fetch	s4, s1
+comp	s3, s4
+ret		NZ
+add		s0, 1
+add		s1, 1
+sub		s2, 1
+jump	NZ, MEM_CMP
 ret
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
