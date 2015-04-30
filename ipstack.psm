@@ -21,7 +21,6 @@ SERIAL				 DSOUT $40
 
 ; constants
 tcp_port	   EQU	 80
-stack  		   EQU   $33 ; first free stack byte
 
 ; variables used for packet parsing
 dmac   		   EQU	 $00
@@ -39,7 +38,9 @@ tcp_sport	   EQU	 $14 ; 2b - source port sent by client
 tcp_seq		   EQU	 $18 ; 4b - sequence number sent by client
 tcp_ack		   EQU	 $1C ; 4b - ack number sent by client
 
+stack  		   EQU   $30 ; first free stack byte
 ; global variables
+TCP_TIMEOUT	   EQU	 $31
 tcp_peer 	   EQU	 $34 ; hash to identify remote peer
 tcp_state	   EQU	 $35 ; tcp connection state (0 = listen, 1 = syn received, 2 = established)
 mymac  		   EQU	 $36
@@ -83,7 +84,6 @@ load	sF, stack
 
 load	s0, 0	 	  ; stop ethernet adapter reset
 out		s0, NET_CTRL
-eint
 
 jump	NEXT_PACKET_WAIT_LOOP  ; skip read done ctrl for first packet
 NEXT_PACKET:
@@ -92,10 +92,24 @@ out		s0, NET_CTRL
 fetch	s0, tcp_state
 out		s0, LED		 		   ; debug tcp state
 NEXT_PACKET_WAIT_LOOP:
-in		s0, NET_STATUS
-test	s0, NET_STATUS_RX_VALID
+in		s1, NET_STATUS
+test	s1, NET_STATUS_RX_VALID
+jump	NZ, NEW_PACKET
+comp	s0, 0
 jump	Z, NEXT_PACKET_WAIT_LOOP
+fetch	s2, TCP_TIMEOUT
+fetch	s3, TCP_TIMEOUT + 1
+fetch	s4, TCP_TIMEOUT + 2
+add		s2, 1
+addc	s3, 0
+addc	s4, 0
+store	s2, TCP_TIMEOUT
+store	s3, TCP_TIMEOUT + 1
+store	s4, TCP_TIMEOUT + 2
+jump	C, TCP_RESET_STATE
+jump	NEXT_PACKET_WAIT_LOOP
 
+NEW_PACKET:
 ; read mac to mem
 load  s0, 12
 load  s1, dmac
@@ -273,6 +287,11 @@ fetch  s1, tcp_seq + 3
 fetch  s2, tcp_peer
 comp   s1, s2
 jump   NZ, NEXT_PACKET	  
+
+load   s2, 0
+store  s2, TCP_TIMEOUT
+store  s2, TCP_TIMEOUT + 1
+store  s2, TCP_TIMEOUT + 2	; reset timeout
 
 test   s5, $05
 jump   NZ, TCP_RESET_STATE ; reset connection if RST or FIN set
