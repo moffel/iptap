@@ -39,20 +39,22 @@ ARCHITECTURE behavior OF test_etherx IS
  
     -- Component Declaration for the Unit Under Test (UUT)
  
-    COMPONENT etherx
-    PORT(
-         rst : IN  std_logic;
-         clk : IN  std_logic;
-         rx_clk : IN  std_logic;
-         rx_d : IN  std_logic_vector(3 downto 0);
-         rx_dv : IN  std_logic;
-         o_ready : OUT  std_logic;
-         o_addr : IN  std_logic_vector(10 downto 0);
-         o_data : OUT  std_logic_vector(7 downto 0);
-         o_done : IN  std_logic
-        );
-    END COMPONENT;
-    
+	COMPONENT etherx
+	PORT(
+		rst : IN std_logic;
+		clk : IN std_logic;
+		rx_clk : IN std_logic;
+		rx_d : IN std_logic_vector(3 downto 0);
+		rx_dv : IN std_logic;
+		o_addr : IN std_logic_vector(10 downto 0);
+		o_done : IN std_logic;
+		o_filter_data : IN std_logic_vector(8 downto 0);
+		o_filter_id : IN std_logic_vector(0 to 0);
+		o_filter_set : IN std_logic;          
+		o_ready : OUT std_logic;
+		o_data : OUT std_logic_vector(7 downto 0)
+		);
+	END COMPONENT;
 
    --Inputs
    signal rst : std_logic := '0';
@@ -62,6 +64,10 @@ ARCHITECTURE behavior OF test_etherx IS
    signal rx_dv : std_logic := '0';
    signal o_addr : std_logic_vector(10 downto 0) := (others => '0');
    signal o_done : std_logic := '0';
+
+	signal o_filter_data : std_logic_vector(8 downto 0) := (others => '0');
+	signal o_filter_id : std_logic_vector(0 to 0) := (others => '0');
+	signal o_filter_set : std_logic := '0';       
 
  	--Outputs
    signal o_ready : std_logic;
@@ -83,8 +89,11 @@ BEGIN
           o_ready => o_ready,
           o_addr => o_addr,
           o_data => o_data,
-          o_done => o_done
-        );
+          o_done => o_done,
+			o_filter_data => o_filter_data,
+			o_filter_id => o_filter_id,
+			o_filter_set => o_filter_set
+       );
 
    -- Clock process definitions
    clk_process :process
@@ -112,6 +121,13 @@ BEGIN
       wait for 100 ns;	
 		rst <= '0';
       wait for clk_period*10;
+		
+		o_filter_set <= '1';
+		o_filter_data <= '1' & x"90";
+		wait for clk_period;
+		o_filter_data <= '1' & x"FF";
+		wait for clk_period * 6;
+		o_filter_set <= '0';
 
 		rx_dv <= '1';
 		rx_d <= "0101";

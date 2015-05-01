@@ -52,6 +52,9 @@ architecture Behavioral of ethernet_adapter is
 		rx_dv : IN std_logic;
 		o_addr : IN std_logic_vector(10 downto 0);
 		o_done : IN std_logic;          
+		o_filter_data : IN std_logic_vector(8 downto 0);
+		o_filter_id : IN std_logic_vector(0 to 0);
+		o_filter_set : IN std_logic;          
 		o_ready : OUT std_logic;
 		o_data : OUT std_logic_vector(7 downto 0)
 		);
@@ -109,6 +112,7 @@ architecture Behavioral of ethernet_adapter is
 	signal pi_cs_end : std_logic;
 	
 	signal pi_send_frame : std_logic;
+	signal pi_set_filter : std_logic;
 	
 	signal po_data_valid : std_logic;
 	signal po_tx_busy : std_logic;
@@ -117,6 +121,7 @@ begin
 	xx_rst			<= not pi_reset;
 
 	-- map in and out ports
+	pi_set_filter	<= port_write when port_addr(2 downto 1) = "10" else '0';
 	pi_send_byte	<= port_write when port_addr = "001" else '0';
 	pi_read_done	<= port_in_data(1) when port_addr = "010" and port_write = '1' else '0';
 	pi_send_frame	<= port_in_data(2) when port_addr = "010" and port_write = '1' else '0';
@@ -128,6 +133,7 @@ begin
 	
 	port_out_data	<= rx_data when port_addr(0) = '0' else
 							po_data_valid & po_tx_busy & "000000";
+							
 	
 	process(clk, rst)
 	begin
@@ -180,7 +186,10 @@ begin
 		o_ready => rx_ready,
 		o_addr => rx_counter,
 		o_data => rx_data,
-		o_done => pi_read_done
+		o_done => pi_read_done,
+		o_filter_data => port_in_data,
+		o_filter_id => port_addr(0 downto 0),
+		o_filter_set => pi_set_filter
 	);
 
 	Inst_ethetx: ethetx PORT MAP(

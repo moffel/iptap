@@ -20,7 +20,12 @@ entity etherx is
 				o_ready : out std_logic; -- frame is available for reading
 				o_addr : in std_logic_vector(10 downto 0);
 				o_data : out std_logic_vector(7 downto 0);
-				o_done : in std_logic); -- frame reading done
+				o_done : in std_logic;
+				
+				o_filter_data : in std_logic_vector(8 downto 0);
+				o_filter_id : in std_logic_vector(0 downto 0);
+				o_filter_set : in std_logic
+			); -- frame reading done
 end etherx;
 
 architecture Behavioral of etherx is
@@ -44,6 +49,10 @@ architecture Behavioral of etherx is
 	
 	type frame_memory_type is array (0 to 2047) of std_logic_vector(7 downto 0);
 	signal frame_memory : frame_memory_type;
+	
+	type filter_memory_type is array (0 to 15) of std_logic_vector(8 downto 0);
+	signal filter_memory0 : filter_memory_type := (others => (others => '0'));
+	signal filter_memory1 : filter_memory_type := (others => (others => '0'));
 
 	type state_type is (IDLE, RECEIVING, WAITING, DONE);
 	signal state, next_state: state_type;
@@ -61,6 +70,12 @@ architecture Behavioral of etherx is
 	signal crc_gen : std_logic_vector(31 downto 0);
 	signal crc_rst : std_logic;
 	signal crc_valid : std_logic;
+	
+	signal rx_filter0 : std_logic_vector(8 downto 0);
+	signal rx_filter0_valid : std_logic;
+	signal rx_filter1 : std_logic_vector(8 downto 0);
+	signal rx_filter1_valid : std_logic;
+	signal rx_filter_valid : std_logic;
 begin
 	
 -- frame memory signals
@@ -78,6 +93,51 @@ begin
 	begin
 		if clk'event and clk = '1' then
 			o_data <= frame_memory(to_integer(unsigned(o_addr)));
+		end if;
+	end process;
+	
+-- filter block
+
+	process(clk)
+	begin
+		if clk'event and clk = '1' then
+			if o_filter_set = '1' then
+				if o_filter_id(0) = '0' then
+					for I in 0 to 14 loop
+						filter_memory0(I+1) <= filter_memory0(I);
+					end loop;
+					filter_memory0(0) <= o_filter_data;
+				else
+					for I in 0 to 14 loop
+						filter_memory1(I+1) <= filter_memory1(I);
+					end loop;
+					filter_memory1(0) <= o_filter_data;
+				end if;
+			end if;
+		end if;
+	end process;
+
+	rx_filter0 <= filter_memory0(to_integer(unsigned(write_addr(3 downto 0))));
+	rx_filter1 <= filter_memory1(to_integer(unsigned(write_addr(3 downto 0))));
+	rx_filter_valid <= rx_filter0_valid or rx_filter1_valid;
+
+	process(RX_CLK, RST)
+	begin
+		if RX_CLK'event and RX_CLK = '1' then
+			if write_addr(10 downto 4) = "0000000" and write_enable(0) = '1' then
+				if rx_filter0(8) = '1' and rx_filter0(7 downto 0) /= rx_byte then
+					rx_filter0_valid <= '0';
+				end if;
+
+				if rx_filter1(8) = '1' and rx_filter1(7 downto 0) /= rx_byte then
+					rx_filter1_valid <= '0';
+				end if;
+			end if;
+			
+			if state = IDLE then
+				rx_filter0_valid <= '1';
+				rx_filter1_valid <= '1';
+			end if;
 		end if;
 	end process;
 
@@ -138,7 +198,7 @@ begin
 		end if;
 	end process;
 	
-	process(state, rx_dv, rx_byte, o_next_trigger, crc_valid)
+	process(state, rx_dv, rx_byte, o_next_trigger, crc_valid, rx_filter_valid)
 	begin
 		next_state <= state;
 	
@@ -155,6 +215,10 @@ begin
 					else
 						next_state <= DONE;
 					end if;
+				end if;
+				
+				if rx_filter_valid = '0' then
+					next_state <= DONE;
 				end if;
 				
 			when WAITING =>

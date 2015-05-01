@@ -5,6 +5,11 @@ NET_STATUS	   		 DSIN	 $01 ;, "net_status.txt"
 NET_WRITE	   		 DSOUT	 $01 ;, "net_output.txt"
 NET_CTRL			 DSOUT	 $02 ;, "net_ctrl.txt"
 
+NET_FILTER0			 EQU	 $00
+NET_FILTER1			 EQU	 $01
+NET_FILTER_SET		 EQU	 $04
+NET_FILTER_MASK		 EQU	 $08
+
 NET_CTRL_RST   		 EQU	 $01  ; reset network hardware (has to set high for some time)
 NET_CTRL_READ_DONE	 EQU	 $02  ; notify adapter to receive the next packet
 NET_CTRL_SEND_FRAME	 EQU	 $04  ; send frame to wire
@@ -87,6 +92,37 @@ load	sF, stack
 
 load	s0, 0	 	  ; stop ethernet adapter reset
 out		s0, NET_CTRL
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; setup ARP filter
+load    s2, NET_FILTER0 | NET_FILTER_SET | NET_FILTER_MASK
+load	s0, $06
+out		s0, s2
+load	s0, $08
+out		s0, s2 			  ; filter ARP protocol
+load	s0, 6
+load	s1, 0
+load    s2, NET_FILTER0 | NET_FILTER_SET
+call	WRITE_PORT_CONST  ; ignore source mac
+load	s0, 6
+load	s1, $FF
+load    s2, NET_FILTER0 | NET_FILTER_SET | NET_FILTER_MASK
+call	WRITE_PORT_CONST  ; broadcasts only
+
+; setup IP filter
+load    s2, NET_FILTER1 | NET_FILTER_SET | NET_FILTER_MASK
+load	s0, $08
+out		s0, s2 			  ; filter IP and ARP protocol
+load	s0, 6
+load	s1, 0
+load    s2, NET_FILTER1 | NET_FILTER_SET
+call	WRITE_PORT_CONST  ; ignore source mac
+load	s0, 6
+load	s1, mymac + 5
+load    s2, NET_FILTER1 | NET_FILTER_SET | NET_FILTER_MASK
+call	WRITE_PORT_REV	  ; addressed to my mac only
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 jump	NEXT_PACKET_WAIT_LOOP  ; skip read done ctrl for first packet
 NEXT_PACKET:
@@ -663,6 +699,29 @@ COMPARE_NET_NEXT:
 add		s1, 1
 sub		s0, 1
 jump	NZ, COMPARE_NET_LOOP
+ret
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+WRITE_PORT_REV:
+; s0! - bytes to write
+; s1! - address to load from
+; s2! - port to write to
+; s3!
+fetch 	s3, s1
+out		s3, s2
+sub		s1, 1
+sub		s0, 1
+jump	NZ, WRITE_PORT_REV
+ret
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+WRITE_PORT_CONST:
+; s0! - bytes to write
+; s1! - value to write
+; s2! - port to write to
+out		s1, s2
+sub		s0, 1
+jump	NZ, WRITE_PORT_CONST
 ret
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
