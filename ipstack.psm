@@ -93,34 +93,10 @@ load	sF, stack
 load	s0, 0	 	  ; stop ethernet adapter reset
 out		s0, NET_CTRL
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; setup ARP filter
-load    s2, NET_FILTER0 | NET_FILTER_SET | NET_FILTER_MASK
-load	s0, $06
-out		s0, s2
-load	s0, $08
-out		s0, s2 			  ; filter ARP protocol
-load	s0, 6
-load	s1, 0
-load    s2, NET_FILTER0 | NET_FILTER_SET
-call	WRITE_PORT_CONST  ; ignore source mac
-load	s0, 6
-load	s1, $FF
-load    s2, NET_FILTER0 | NET_FILTER_SET | NET_FILTER_MASK
-call	WRITE_PORT_CONST  ; broadcasts only
-
-; setup IP filter
-load    s2, NET_FILTER1 | NET_FILTER_SET | NET_FILTER_MASK
-load	s0, $08
-out		s0, s2 			  ; filter IP and ARP protocol
-load	s0, 6
-load	s1, 0
-load    s2, NET_FILTER1 | NET_FILTER_SET
-call	WRITE_PORT_CONST  ; ignore source mac
-load	s0, 6
-load	s1, mymac + 5
-load    s2, NET_FILTER1 | NET_FILTER_SET | NET_FILTER_MASK
-call	WRITE_PORT_REV	  ; addressed to my mac only
+load	s0, NET_FILTER0 | NET_FILTER_SET
+call	FILTER_ARP_FRAMES
+load	s0, NET_FILTER1 | NET_FILTER_SET
+call	FILTER_DESTMAC_FRAMES
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -389,6 +365,8 @@ call	MEM_CPY		   		  ; save peer state for connection tracking
 
 load	s8, $12			; ACK, SYN
 call	WRITE_TCP_HEAD_EMPTY_AND_SEND
+load	s0, NET_FILTER_SET | NET_FILTER1
+call	FILTER_SRCMAC_FRAMES
 jump	TCP_NEXT_STATE	; nop
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -411,6 +389,8 @@ load	s8, $14		; ACK, RST
 call	WRITE_TCP_HEAD_EMPTY_AND_SEND
 
 TCP_RESET_STATE_NOT_CONNECTED:
+load	s0, NET_FILTER_SET | NET_FILTER1
+call	FILTER_DESTMAC_FRAMES
 load	s0, 0
 store	s0, tcp_state
 jump	NEXT_PACKET
@@ -631,6 +611,63 @@ out	   s4, NET_WRITE		 ; protocol type low
 ret
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+FILTER_ARP_FRAMES:
+; s0! - filter port (NET_FILTERX | NET_FILTER_SET)
+; s1!, s2!, s3!
+load   	s2, s0
+load	s0, 0
+out		s0, s2
+out		s0, s2			  ; padding to 16b
+or		s2, NET_FILTER_MASK
+load	s0, $06
+out		s0, s2
+load	s1, $08
+out		s1, s2 			  ; filter ARP protocol
+load	s0, 6
+load	s1, 0
+and		s2, ~NET_FILTER_MASK;
+call	WRITE_PORT_CONST  ; ignore source mac
+load	s0, 6
+load	s1, $FF
+or		s2, NET_FILTER_MASK
+jump	WRITE_PORT_CONST  ; broadcasts only
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+FILTER_DESTMAC_FRAMES:
+; s0! - filter port (NET_FILTERX | NET_FILTER_SET)
+; s1!, s2!, s3!
+load    s2, s0
+load	s0, 3
+load	s1, 0
+call	WRITE_PORT_CONST		 ; padding to 16b
+or		s2, NET_FILTER_MASK
+load	s0, $08
+out		s0, s2 			   		 ; select IP and ARP protocol
+load	s0, 6
+load	s1, 0
+and		s2, ~NET_FILTER_MASK;
+call	WRITE_PORT_CONST  ; ignore source mac
+load	s0, 6
+load	s1, mymac + 5
+or		s2, NET_FILTER_MASK
+jump	WRITE_PORT_REV	  ; addressed to my mac only
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+FILTER_SRCMAC_FRAMES:
+; s0! - filter port (NET_FILTERX | NET_FILTER_SET)
+; s1!, s2!, s3!
+load    s2, s0
+load	s0, 3
+load	s1, 0
+call	WRITE_PORT_CONST		 ; padding to 16b
+or		s2, NET_FILTER_MASK
+load	s0, $08
+out		s0, s2 			   		 ; select IP and ARP protocol
+load	s0, 12
+load	s1, smac + 5
+jump	WRITE_PORT_REV			 ; addressed like the last received frame
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 SKIP_NET:
 ; s0! - number of bytes to skip
 ; s1!
@@ -705,7 +742,7 @@ ret
 WRITE_PORT_REV:
 ; s0! - bytes to write
 ; s1! - address to load from
-; s2! - port to write to
+; s2 - port to write to
 ; s3!
 fetch 	s3, s1
 out		s3, s2
@@ -718,7 +755,7 @@ ret
 WRITE_PORT_CONST:
 ; s0! - bytes to write
 ; s1! - value to write
-; s2! - port to write to
+; s2 - port to write to
 out		s1, s2
 sub		s0, 1
 jump	NZ, WRITE_PORT_CONST
