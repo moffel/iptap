@@ -56,33 +56,34 @@ mymac  		   EQU	 $36
 myip   		   EQU	 $3C
 
 ; simulator is buggy. first port read is always zero
-in	  s0, NET_READ
+;in	  s0, NET_READ
 
 ; start to reset ethernet adapter
 load	s0, NET_CTRL_RST
 out		s0, NET_CTRL
 
 ; store my ip and mac in memory
-load	s0, 10
+load	s0, 10	  	  	 	   	 ; IP
+load	s1, 0
+load	s2, 0
+load	s3, 2
+load	s4, $02					 ; MAC namespace (locally administered)
+load	s5, $00
+load	s6, $48
+load	s7, s1 					 ; MAC UID
+load	s8, s2
+load	s9, s3
+
 store	s0, myip
-load	s0, 0
-store	s0, myip + 1
-load	s0, 0
-store	s0, myip + 2
-load	s0, 2
-store	s0, myip + 3
-load	s0, $80
-store	s0, mymac
-load	s0, $86
-store	s0, mymac + 1
-load	s0, $f2
-store	s0, mymac + 2
-load	s0, $08
-store	s0, mymac + 3
-load	s0, $ec
-store	s0, mymac + 4
-load	s0, $92
-store	s0, mymac + 5
+store	s1, myip + 1
+store	s2, myip + 2
+store	s3, myip + 3
+store	s4, mymac
+store	s5, mymac + 1
+store	s6, mymac + 2
+store	s7, mymac + 3
+store	s8, mymac + 4
+store	s9, mymac + 5
 
 ; initical tcp state
 load	s0, 0
