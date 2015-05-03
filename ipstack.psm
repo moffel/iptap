@@ -21,8 +21,16 @@ NET_CTRL_CS_ONLY	 EQU	 $40  ; use data for checksum but do not include the data 
 NET_STATUS_RX_VALID	 EQU	 $80  ; frame received and available for reading
 NET_STATUS_TX_BUSY	 EQU	 $40  ; tx unit is busy transmitting the last frame
 
-LED					 DSOUT $80
-SERIAL				 DSOUT $40
+LOGIC_ADDR_BEGIN	 DSOUT	 $30  ; 0011 - offset shift register
+LOGIC_ADDR_END		 DSOUT	 $50  ; 0101 - end offset shift register
+LOGIC_BEGIN			 DSOUT	 $70  ; 0111 - start read or write operation
+LOGIC_STATUS		 DSIN	 $02  ; read busy status
+
+LOGIC_BEGIN_READ	 EQU	 0	  ; logic -> nic
+LOGIC_BEGIN_WRITE	 EQU	 1	  ; nic -> logic
+LOGIC_STATUS_BUSY	 EQU	 1
+
+LED					 DSOUT	 $80
 
 ; constants
 tcp_port	   EQU	 80
@@ -43,8 +51,10 @@ tcp_sport	   EQU	 $14 ; 2b - source port sent by client
 tcp_seq		   EQU	 $16 ; 4b - sequence number sent by client
 tcp_ack		   EQU	 $1A ; 4b - ack number sent by client
 
-stack  		   EQU   $23 ; first free stack byte
+stack  		   EQU   $22 ; first free stack byte
 ; global variables
+BP_OFFSET	   EQU	 $1E ; 4b - current logic offset
+BP_SIZE 	   EQU	 $22 ; 2b - binary protocol byte counter
 TCP_PEER_IP	   EQU	 $24 ; 4b - connected ip address
 TCP_PEER_PORT  EQU	 $28 ; 2b - connected port
 TCP_PEER_R_SEQ EQU	 $2A ; 4b - next expected client sequence number (remote)
@@ -333,7 +343,7 @@ call	SKIP_NET	  ; skip tcp header
 load	s0, sC
 or		s0, sD
 jump	Z, NEXT_PACKET ; no payload => no response
-jump	HTTP_PARSE	  ; begin content parsing
+jump	SERVER_PARSE   ; begin content parsing
 
 ;; TCP state syn sent
 TCP_SYNSENT:
@@ -390,49 +400,95 @@ load	s8, $14		; ACK, RST
 call	WRITE_TCP_HEAD_EMPTY_AND_SEND
 
 TCP_RESET_STATE_NOT_CONNECTED:
+call	TCP_CONNECTION_CLOSED
+jump	NEXT_PACKET
+
+TCP_CONNECTION_CLOSED:
 load	s0, NET_FILTER_SET | NET_FILTER1
 call	FILTER_DESTMAC_FRAMES
 load	s0, 0
 store	s0, tcp_state
-jump	NEXT_PACKET
+ret
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; HTTP
+;; SERVER
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-HTTP_PARSE:
-; simple echo function as dummy
-load	s6, sC
-load	s7, sD
-load	s8, $10		   ; ACK
-call	WRITE_TCP_HEAD
+SERVER_PARSE:
+fetch	s8, BP_SIZE
+fetch	s9, BP_SIZE + 1
+load	s0, s8
+or		s0, s9
+jump	NZ, SERVER_RECEIVE
 
-load	s1, 0		  ; byte counter
-ECHO_LOOP:
-load	s0, sC
-or		s0, sD
-jump	Z, HTTP_PARSE_ADD_PADDING
-in		s0, NET_READ
-out		s0, NET_WRITE
-sub		sD, 1
-subc	sC, 0
-comp	s1, 6
-jump	Z, ECHO_LOOP
-add		s1, 1		 			 ; count number of padding bytes (not) needed
-jump	ECHO_LOOP
+; new package
+in	  	s0, NET_READ	  ; 1b - operation (0 - read, 1 - write)
+in		s1, NET_READ	  ; unused (alignment)
+in		s8, NET_READ	  ; 2b - size
+in		s9, NET_READ
+in		s4, NET_READ	  ; 4b - offset
+in		s5, NET_READ
+in		s6, NET_READ
+in		s7, NET_READ
+out		s4, LOGIC_ADDR_BEGIN
+out		s5, LOGIC_ADDR_BEGIN
+out		s6, LOGIC_ADDR_BEGIN
+out		s7, LOGIC_ADDR_BEGIN
+store	s4, BP_OFFSET
+store	s5, BP_OFFSET + 1
+store	s6, BP_OFFSET + 2
+store	s7, BP_OFFSET + 3
 
-HTTP_PARSE_ADD_PADDING:
-comp	s1, 6
-jump	Z, HTTP_PARSE_SEND_PACKET
-out		sD, NET_WRITE
-add		s1, 1
-jump	HTTP_PARSE_ADD_PADDING
+SERVER_RECEIVE:
+load	s0, s8
+load	s1, s9 		  	 	   ; bytes to send
+load	s2, sC
+load	s3, sD				   ; bytes in tcp packet
+sub		s3, 8		  	 	   ; payload -= header
+subc	s2, 0
+call	MATH_MIN
+fetch	s2, BP_OFFSET
+fetch	s3, BP_OFFSET + 1
+fetch	s4, BP_OFFSET + 2
+fetch	s5, BP_OFFSET + 3
+add		s5, s1
+addc	s4, s0
+addc	s3, 0
+addc	s2, 0 				   ; end = offset + min(payload size, job size)
+out		s2, LOGIC_ADDR_END
+out		s3, LOGIC_ADDR_END
+out		s4, LOGIC_ADDR_END
+out		s5, LOGIC_ADDR_END
+load	s0, LOGIC_BEGIN_WRITE
+out		s0, LOGIC_BEGIN
 
-HTTP_PARSE_SEND_PACKET:
-load	s1, NET_CTRL_CS_END
-out		s1, NET_CTRL
-load	s1, NET_CTRL_SEND_FRAME
-out		s1, NET_CTRL
-jump	NEXT_PACKET
+sub		s9, s1
+subc	s8, s0
+store	s8, BP_SIZE
+store	s9, BP_SIZE + 1		   ; todo -= done
+
+; respond with ACK
+load	s8, $10	 			   ; ACK
+call	WRITE_TCP_HEAD_EMPTY_AND_SEND
+
+; wait until DMA unit has finished reading
+SERVER_RECEIVE_LOOP:
+in		s0, LOGIC_STATUS
+test	s0, LOGIC_STATUS_BUSY
+jump	NZ, SERVER_RECEIVE_LOOP
+
+fetch	s8, BP_SIZE
+fetch	s9, BP_SIZE + 1
+or		s8, s9
+jump	NZ, NEXT_PACKET		   ; still work todo
+jump	TCP_RESET_STATE		   ; reset connection
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 WRITE_TCP_HEAD_EMPTY_AND_SEND:
@@ -790,6 +846,32 @@ add		s0, 1
 add		s1, 1
 sub		s2, 1
 jump	NZ, MEM_CMP
+ret
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+MATH_MIN:
+; s0!,s1! - in A out min(A,B)
+; s2 ,s3  - in B
+comp	  s2, s0
+jump	  C, MATH_MIN_B		 ; a > b
+ret		  NZ 				 ; a != b
+comp	  s3, s1
+ret		  NC  				 ; a <= b
+MATH_MIN_B:
+load	   s0, s2
+load	   s1, s3
+ret
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+MATH_COMP:
+; s0,s1 - in A
+; s2,s3 - in B
+; s4! = 0 if equal, s5!
+load   s4, s0
+xor	   s4, s2
+load   s5, s1
+xor	   s5, s3
+or	   s4, s5
 ret
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

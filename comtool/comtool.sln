@@ -5,6 +5,8 @@ VisualStudioVersion = 12.0.31101.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "comtool", "comtool.vcxproj", "{FF5873A0-1A31-4A89-A93E-F5B1AC8D32EC}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "nettool", "..\nettool\nettool.vcxproj", "{D26E9DDE-D72C-4FF3-96B4-8751C1F08A9F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -15,6 +17,10 @@ Global
 		{FF5873A0-1A31-4A89-A93E-F5B1AC8D32EC}.Debug|Win32.Build.0 = Debug|Win32
 		{FF5873A0-1A31-4A89-A93E-F5B1AC8D32EC}.Release|Win32.ActiveCfg = Release|Win32
 		{FF5873A0-1A31-4A89-A93E-F5B1AC8D32EC}.Release|Win32.Build.0 = Release|Win32
+		{D26E9DDE-D72C-4FF3-96B4-8751C1F08A9F}.Debug|Win32.ActiveCfg = Debug|Win32
+		{D26E9DDE-D72C-4FF3-96B4-8751C1F08A9F}.Debug|Win32.Build.0 = Debug|Win32
+		{D26E9DDE-D72C-4FF3-96B4-8751C1F08A9F}.Release|Win32.ActiveCfg = Release|Win32
+		{D26E9DDE-D72C-4FF3-96B4-8751C1F08A9F}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
