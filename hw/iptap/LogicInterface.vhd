@@ -16,8 +16,8 @@ entity LogicInterface is
 		
 			m_addr : in std_logic_vector(7 downto 0);
 			m_data_in : in std_logic_vector(7 downto 0);
-			m_data_out : out std_logic_vector(7 downto 0);
-			m_we, m_re : in std_logic;
+			m_we : in std_logic;
+			m_busy : out std_logic;
 			
 			n_data_in : in std_logic_vector(7 downto 0);
 			n_data_out : out std_logic_vector(7 downto 0);
@@ -55,8 +55,7 @@ begin
 	n_next_out <= '1' when state = PUT and l_ack = '1' else '0';
 	n_next_in <= '1' when state = GET and l_ack = '1' else '0';
 
-	m_data_out(7 downto 1) <= (others => '0');
-	m_data_out(0) <= '0' when state = IDLE else '1';
+	m_busy <= '0' when state = IDLE else '1';
 
 	process(clk, rst)
 	begin

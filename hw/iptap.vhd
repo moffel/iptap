@@ -27,8 +27,7 @@ entity iptap is
 				E_TX_EN : out std_logic;
 				E_TX_CLK : in std_logic;
 
-				led : out std_logic_vector(7 downto 0);
-				s_tx : out std_logic
+				led : out std_logic_vector(7 downto 0)
 	 );
 end iptap;
 
@@ -58,19 +57,6 @@ architecture Behavioral of iptap is
 		);
 	END COMPONENT;
 
-	COMPONENT uart_tx
-	PORT(
-		data_in : IN std_logic_vector(7 downto 0);
-		write_buffer : IN std_logic;
-		reset_buffer : IN std_logic;
-		en_16_x_baud : IN std_logic;
-		clk : IN std_logic;          
-		serial_out : OUT std_logic;
-		buffer_full : OUT std_logic;
-		buffer_half_full : OUT std_logic
-		);
-	END COMPONENT;
-
 	COMPONENT ethernet_adapter
 	PORT(
 		clk : IN std_logic;
@@ -89,6 +75,27 @@ architecture Behavioral of iptap is
 		xx_rst : OUT std_logic
 		);
 	END COMPONENT;
+	
+	COMPONENT LogicInterface
+	Port ( 
+			clk, rst : in std_logic;
+		
+			m_addr : in std_logic_vector(7 downto 0);
+			m_data_in : in std_logic_vector(7 downto 0);
+			m_we : in std_logic;
+			m_busy : out std_logic;
+			
+			n_data_in : in std_logic_vector(7 downto 0);
+			n_data_out : out std_logic_vector(7 downto 0);
+			n_next_in, n_next_out : out std_logic;
+			
+			l_addr : out std_logic_vector(31 downto 0);
+			l_data_in : in std_logic_vector(7 downto 0);
+			l_data_out : out std_logic_vector(7 downto 0);
+			l_we, l_re : out std_logic;
+			l_ack : in std_logic
+	 );
+	END COMPONENT;
 
 	signal instruction_address : std_logic_vector(9 downto 0);
 	signal instruction : std_logic_vector(17 downto 0);
@@ -97,12 +104,23 @@ architecture Behavioral of iptap is
 	signal port_out : std_logic_vector(7 downto 0);
 	signal port_id : std_logic_vector(7 downto 0);
 	
-	signal uart_write : std_logic;
-	signal uart_counter : std_logic_vector(8 downto 0);
-	signal uart_baud16 : std_logic;
-	
-	signal net_input : std_logic_vector(8 downto 0);
 	signal net_output : std_logic_vector(7 downto 0);
+	signal nic_port_addr : std_logic_vector(2 downto 0);
+	signal nic_port_data : std_logic_vector(8 downto 0);
+	signal nic_port_write : std_logic;
+	signal nic_port_read : std_logic;
+	
+	signal logic_busy : std_logic;
+	signal ln_out : std_logic_vector(7 downto 0);
+	signal ln_next_out : std_logic;
+	signal ln_next_in : std_logic;
+	
+	signal logic_addr : std_logic_vector(31 downto 0);
+	signal logic_data_in : std_logic_vector(7 downto 0);
+	signal logic_data_out : std_logic_vector(7 downto 0);
+	signal logic_we : std_logic;
+	signal logic_re : std_logic;
+	signal logic_ack : std_logic;
 begin
 
 	Inst_kcpsm3: kcpsm3 PORT MAP(
@@ -124,28 +142,15 @@ begin
 		instruction => instruction,
 		clk => clk
 	);
-	
-	Inst_uart_tx: uart_tx PORT MAP(
-		data_in => port_out,
-		write_buffer => uart_write,
-		reset_buffer => rst,
-		en_16_x_baud => uart_baud16,
-		serial_out => s_tx,
---		buffer_full => ,
---		buffer_half_full => ,
-		clk => clk
-	);
-
-	uart_write <= port_id(6) when port_write = '1' else '0';
-	
+	----------------------------
 	Inst_ethernet_adapter: ethernet_adapter PORT MAP(
 		clk => clk,
 		rst => rst,
-		port_in_data => net_input,
+		port_in_data => nic_port_data,
 		port_out_data => net_output,
-		port_addr => port_id(2 downto 0),
-		port_read => port_read,
-		port_write => port_write,
+		port_addr => nic_port_addr,
+		port_read => nic_port_read,
+		port_write => nic_port_write,
 		tx_clk => E_TX_CLK,
 		tx_d => E_TXD,
 		tx_dv => E_TX_EN,
@@ -154,8 +159,37 @@ begin
 		rx_dv => E_RX_DV,
 		xx_rst => E_NRST
 	);
+	
+	nic_port_data <=	port_id(3) & port_out when ln_next_out = '0' else
+							'0' & ln_out;
+	nic_port_addr <=	"000" when ln_next_in = '1' else
+							"001" when ln_next_out = '1' else
+							port_id(2 downto 0);
+	nic_port_read <=	port_read or ln_next_in;
+	nic_port_write <=	port_write or ln_next_out;
+	
+	-------------------------------
+	LogicInterfaceInst: LogicInterface PORT MAP(
+		clk => clk,
+		rst => rst,
+		m_addr => port_id,
+		m_data_in => port_out,
+		m_we => port_write,
+		m_busy => logic_busy,
+		n_data_in => net_output,
+		n_data_out => ln_out,
+		n_next_in => ln_next_in,
+		n_next_out => ln_next_out,
+		l_addr => logic_addr,
+		l_data_in => logic_data_in,
+		l_data_out => logic_data_out,
+		l_we => logic_we,
+		l_re => logic_re,
+		l_ack => logic_ack
+	);
+	logic_ack <= logic_re or logic_we;
+	logic_data_in <= x"00";
 
-	net_input <= port_id(3) & port_out;
 	
 	process(clk, rst)
 	begin
@@ -164,17 +198,12 @@ begin
 		elsif clk'event and clk = '1' then
 
 			-- led
-			if port_write = '1' and port_id(7) = '1' then
-				led <= port_out;
-			end if;
+--			if port_write = '1' and port_id(7) = '1' then
+--				led <= port_out;
+--			end if;
 			
-			-- uart
-			if unsigned(uart_counter) = 325 then
-				uart_counter <= (others => '0');
-				uart_baud16 <= '1';
-			else
-				uart_counter <= std_logic_vector( unsigned(uart_counter) + 1 );
-				uart_baud16 <= '0';
+			if logic_we = '1' and logic_addr = x"00000000" then
+				led <= logic_data_out;
 			end if;
 			
 		end if;
