@@ -16,19 +16,24 @@ void main()
 	addr.sin_port = htons(81);
 
 	SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
-	connect(s, (sockaddr*)&addr, sizeof(addr));
+
+	long zero = 0;
+	int err = setsockopt(s, SOL_SOCKET, SO_SNDBUF, (char*)&zero, 4);
+
+
+	err = connect(s, (sockaddr*)&addr, sizeof(addr));
 
 	long offset = htonl(1 << 31);
-	send(s, (const char*)&offset, sizeof(offset), 0);
+	err = send(s, (const char*)&offset, sizeof(offset), 0);
 
 	char* largebuffer = new char[1024 * 1024];
 	for (int i = 0; i < 1024 * 1024; ++i)
 		largebuffer[i] = 'a' + (rand() % 26);
 
 
-	//while (1)
+//	while (1)
 	{
-		send(s, largebuffer, 1024*1024, 0);
+		err = send(s, largebuffer, 128, 0);
 	}
 
 
@@ -43,7 +48,7 @@ void main()
 //	//	Sleep(10);
 //	}
 
-		closesocket(s);
+	err = closesocket(s);
 
 
 

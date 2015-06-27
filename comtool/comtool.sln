@@ -7,6 +7,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "comtool", "comtool.vcxproj"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "nettool", "..\nettool\nettool.vcxproj", "{D26E9DDE-D72C-4FF3-96B4-8751C1F08A9F}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "iptap", "iptap\iptap.vcxproj", "{75E10494-F944-41A2-9B97-BD6B5A4EE0B0}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -21,6 +23,10 @@ Global
 		{D26E9DDE-D72C-4FF3-96B4-8751C1F08A9F}.Debug|Win32.Build.0 = Debug|Win32
 		{D26E9DDE-D72C-4FF3-96B4-8751C1F08A9F}.Release|Win32.ActiveCfg = Release|Win32
 		{D26E9DDE-D72C-4FF3-96B4-8751C1F08A9F}.Release|Win32.Build.0 = Release|Win32
+		{75E10494-F944-41A2-9B97-BD6B5A4EE0B0}.Debug|Win32.ActiveCfg = Debug|Win32
+		{75E10494-F944-41A2-9B97-BD6B5A4EE0B0}.Debug|Win32.Build.0 = Debug|Win32
+		{75E10494-F944-41A2-9B97-BD6B5A4EE0B0}.Release|Win32.ActiveCfg = Release|Win32
+		{75E10494-F944-41A2-9B97-BD6B5A4EE0B0}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
