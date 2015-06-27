@@ -17,7 +17,7 @@ use IEEE.NUMERIC_STD.ALL;
 -- X1XXXXXX - uart
 
 entity iptap is
-    Port (	clk,rst : in std_logic;
+    Port (	clk, rst : in std_logic;
 				
 				E_NRST : out std_logic;
 				E_RXD : in std_logic_vector (3 downto 0);
@@ -27,7 +27,11 @@ entity iptap is
 				E_TX_EN : out std_logic;
 				E_TX_CLK : in std_logic;
 
-				led : out std_logic_vector(7 downto 0)
+				L_ADDR : out std_logic_vector(31 downto 0);
+				L_DATA_IN : in std_logic_vector(7 downto 0);
+				L_DATA_OUT : out std_logic_vector(7 downto 0);
+				L_WE, L_RE : out std_logic;
+				L_ACK : in std_logic
 	 );
 end iptap;
 
@@ -119,13 +123,7 @@ architecture Behavioral of iptap is
 	signal ln_out : std_logic_vector(7 downto 0);
 	signal ln_next_out : std_logic;
 	signal ln_next_in : std_logic;
-	
-	signal logic_addr : std_logic_vector(31 downto 0);
-	signal logic_data_in : std_logic_vector(7 downto 0);
-	signal logic_data_out : std_logic_vector(7 downto 0);
-	signal logic_we : std_logic;
-	signal logic_re : std_logic;
-	signal logic_ack : std_logic;
+
 begin
 
 	Inst_kcpsm3: kcpsm3 PORT MAP(
@@ -189,16 +187,14 @@ begin
 		n_next_in => ln_next_in,
 		n_next_out => ln_next_out,
 		
-		l_addr => logic_addr,
-		l_data_in => logic_data_in,
-		l_data_out => logic_data_out,
-		l_we => logic_we,
-		l_re => logic_re,
-		l_ack => logic_ack
+		l_addr => L_ADDR,
+		l_data_in => L_DATA_IN,
+		l_data_out => L_DATA_OUT,
+		l_we => L_WE,
+		l_re => L_RE,
+		l_ack => L_ACK
 	);
-	logic_ack <= logic_re or logic_we;
-	logic_data_in <= x"00";
-
+	
 	------------------------------------
 	-- device selector
 	dev_nic_we <= port_write	when port_id(7 downto 5) = "000" else '0';
@@ -209,27 +205,6 @@ begin
 
 	port_in <=	net_output when dev_nic_re = '1' else
 					logic_output;
-
-	------------------------------------
-	
-	process(clk, rst)
-	begin
-		if rst = '1' then
-			led <= (others => '0');
-		elsif clk'event and clk = '1' then
-
-			-- led
---			if dev_led_we = '1' then
---				led <= port_out;
---			end if;
-			
---			if logic_we = '1' and logic_addr = x"00000010" then
-			if logic_we = '1' then
-				led <= logic_data_out;
-			end if;
-			
-		end if;
-	end process;
 
 end Behavioral;
 
