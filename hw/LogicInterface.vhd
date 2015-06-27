@@ -14,7 +14,7 @@ entity LogicInterface is
     Port ( 
 			clk, rst : in std_logic;
 		
-			m_addr : in std_logic_vector(7 downto 0);
+			m_addr : in std_logic_vector(2 downto 0);
 			m_data_in : in std_logic_vector(7 downto 0);
 			m_data_out : out std_logic_vector(7 downto 0);
 			m_we, m_re : in std_logic;
@@ -52,8 +52,8 @@ begin
 	n_data_out <= l_data_in;
 	l_we <= '1' when state = PUT else '0';
 	l_re <= '1' when state = GET else '0';
-	n_next_out <= '1' when state = PUT and l_ack = '1' else '0';
-	n_next_in <= '1' when state = GET and l_ack = '1' else '0';
+	n_next_out <= '1' when state = GET and l_ack = '1' else '0';
+	n_next_in <= '1' when state = PUT and l_ack = '1' else '0';
 
 	m_data_out(7 downto 1) <= (others => '0');
 	m_data_out(0) <= '0' when state = IDLE else '1';
@@ -69,13 +69,13 @@ begin
 				it <= it_inc;
 			end if;
 			
-			if m_we = '1' and m_addr(4) = '1' then
-				if m_addr(6 downto 5) = "01" then
+			if m_we = '1' then
+				if m_addr(0) = '1' then
 					it(31 downto 24) <= it(23 downto 16);
 					it(23 downto 16) <= it(15 downto  8);
 					it(15 downto  8) <= it( 7 downto  0);
 					it( 7 downto  0) <= m_data_in;
-				elsif m_addr(6 downto 5) = "10" then
+				elsif m_addr(1) = '1' then
 					it_end(31 downto 24) <= it_end(23 downto 16);
 					it_end(23 downto 16) <= it_end(15 downto  8);
 					it_end(15 downto  8) <= it_end( 7 downto  0);
@@ -92,7 +92,7 @@ begin
 	
 		case state is
 			when IDLE =>
-				if m_we = '1' and m_addr(6 downto 4) = "111" then
+				if m_we = '1' and m_addr(2) = '1' then
 					if m_data_in(0) = '0' then
 						next_state <= GET;
 					else

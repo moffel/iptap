@@ -80,10 +80,10 @@ architecture Behavioral of iptap is
 	Port ( 
 			clk, rst : in std_logic;
 		
-			m_addr : in std_logic_vector(7 downto 0);
+			m_addr : in std_logic_vector(2 downto 0);
 			m_data_in : in std_logic_vector(7 downto 0);
-			m_we : in std_logic;
-			m_busy : out std_logic;
+			m_data_out : out std_logic_vector(7 downto 0);
+			m_we, m_re : in std_logic;
 			
 			n_data_in : in std_logic_vector(7 downto 0);
 			n_data_out : out std_logic_vector(7 downto 0);
@@ -102,7 +102,12 @@ architecture Behavioral of iptap is
 
 	signal port_write, port_read : std_logic;
 	signal port_out : std_logic_vector(7 downto 0);
+	signal port_in : std_logic_vector(7 downto 0);
 	signal port_id : std_logic_vector(7 downto 0);
+	
+	signal dev_nic_we, dev_nic_re : std_logic;
+	signal dev_logic_we, dev_logic_re : std_logic;
+	signal dev_led_we : std_logic;
 	
 	signal net_output : std_logic_vector(7 downto 0);
 	signal nic_port_addr : std_logic_vector(2 downto 0);
@@ -110,7 +115,7 @@ architecture Behavioral of iptap is
 	signal nic_port_write : std_logic;
 	signal nic_port_read : std_logic;
 	
-	signal logic_busy : std_logic;
+	signal logic_output : std_logic_vector(7 downto 0);
 	signal ln_out : std_logic_vector(7 downto 0);
 	signal ln_next_out : std_logic;
 	signal ln_next_in : std_logic;
@@ -130,7 +135,7 @@ begin
 		write_strobe => port_write,
 		out_port => port_out,
 		read_strobe => port_read,
-		in_port => net_output,
+		in_port => port_in,
 		interrupt => '0',
 --		interrupt_ack => ,
 		reset => rst,
@@ -165,21 +170,25 @@ begin
 	nic_port_addr <=	"000" when ln_next_in = '1' else
 							"001" when ln_next_out = '1' else
 							port_id(2 downto 0);
-	nic_port_read <=	port_read or ln_next_in;
-	nic_port_write <=	port_write or ln_next_out;
+	nic_port_read <=	dev_nic_re or ln_next_in;
+	nic_port_write <=	dev_nic_we or ln_next_out;
 	
 	-------------------------------
 	LogicInterfaceInst: LogicInterface PORT MAP(
 		clk => clk,
 		rst => rst,
-		m_addr => port_id,
+		
+		m_addr => port_id(2 downto 0),
 		m_data_in => port_out,
-		m_we => port_write,
-		m_busy => logic_busy,
+		m_data_out => logic_output,
+		m_we => dev_logic_we,
+		m_re => dev_logic_re,
+		
 		n_data_in => net_output,
 		n_data_out => ln_out,
 		n_next_in => ln_next_in,
 		n_next_out => ln_next_out,
+		
 		l_addr => logic_addr,
 		l_data_in => logic_data_in,
 		l_data_out => logic_data_out,
@@ -190,6 +199,18 @@ begin
 	logic_ack <= logic_re or logic_we;
 	logic_data_in <= x"00";
 
+	------------------------------------
+	-- device selector
+	dev_nic_we <= port_write	when port_id(7 downto 5) = "000" else '0';
+	dev_nic_re <= port_read		when port_id(7 downto 5) = "000" else '0';
+	dev_logic_we <= port_write	when port_id(7 downto 5) = "001" else '0';
+	dev_logic_re <= port_read	when port_id(7 downto 5) = "001" else '0';
+	dev_led_we <= port_write	when port_id(7 downto 5) = "010" else '0';
+
+	port_in <=	net_output when dev_nic_re = '1' else
+					logic_output;
+
+	------------------------------------
 	
 	process(clk, rst)
 	begin
@@ -198,11 +219,11 @@ begin
 		elsif clk'event and clk = '1' then
 
 			-- led
---			if port_write = '1' and port_id(7) = '1' then
+--			if dev_led_we = '1' then
 --				led <= port_out;
 --			end if;
 			
-			if logic_we = '1' and logic_addr = x"00000000" then
+			if logic_we = '1' and logic_addr = x"00000010" then
 				led <= logic_data_out;
 			end if;
 			

@@ -4,14 +4,6 @@
 
 #pragma comment(lib, "WS2_32.lib")
 
-struct NetHeader
-{
-	char			operation;
-	char			padding;
-	unsigned short	size;
-	unsigned long	offset;
-};
-
 void main()
 {
 	WSADATA wsaData;
@@ -23,20 +15,10 @@ void main()
 	addr.sin_addr.s_addr = inet_addr("10.0.0.2");
 	addr.sin_port = htons(80);
 
-	for (int i = 0;; i++)
+	for (int i = 0; i < 1; i++)
 	{
-		char buffer[sizeof(NetHeader) + 256] = {};
-		NetHeader* head = (NetHeader*)buffer;
-		head->offset = 0;
-		head->size = 256;
-
-		for (int j = 0; j < 256; ++j)
-		{
-			buffer[sizeof(NetHeader) + j] = i + j;
-		}
-
-		head->offset = htonl(head->offset);
-		head->size = htons(head->size);
+		char a = 0xa;
+		char buffer[] = { 0x00, 0x00, 0x00, 0x10, a };
 
 		SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
 		connect(s, (sockaddr*)&addr, sizeof(addr));
@@ -44,7 +26,6 @@ void main()
 		closesocket(s);
 
 		printf("send %i\n", i);
-		Sleep(5000);
 
 	}
 
