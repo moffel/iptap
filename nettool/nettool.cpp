@@ -18,17 +18,17 @@ void main()
 	SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
 	connect(s, (sockaddr*)&addr, sizeof(addr));
 
-	long offset = htonl(0);
+	long offset = htonl(1 << 31);
 	send(s, (const char*)&offset, sizeof(offset), 0);
 
 	char* largebuffer = new char[1024 * 1024];
 	for (int i = 0; i < 1024 * 1024; ++i)
-		largebuffer[i] = i;
+		largebuffer[i] = 'a' + (rand() % 26);
 
 
-	while (1)
+	//while (1)
 	{
-		send(s, largebuffer, 1024 * 1024, 0);
+		send(s, largebuffer, 1024*1024, 0);
 	}
 
 

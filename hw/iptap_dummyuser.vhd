@@ -3,7 +3,7 @@ use IEEE.STD_LOGIC_1164.ALL;
 
 -- Uncomment the following library declaration if using
 -- arithmetic functions with Signed or Unsigned values
---use IEEE.NUMERIC_STD.ALL;
+use IEEE.NUMERIC_STD.ALL;
 
 -- Uncomment the following library declaration if instantiating
 -- any Xilinx primitives in this code.
@@ -22,7 +22,8 @@ entity iptap_dummyuser is
 				E_TX_EN : out std_logic;
 				E_TX_CLK : in std_logic;
 
-				LED : out std_logic_vector(7 downto 0)
+				LED : out std_logic_vector(7 downto 0);
+				S_TX : out  STD_LOGIC
 			
 			);
 end iptap_dummyuser;
@@ -49,11 +50,28 @@ architecture Behavioral of iptap_dummyuser is
 		);
 	END COMPONENT;
 
+	component kcuart_tx 
+    Port (        data_in : in std_logic_vector(7 downto 0);
+           send_character : in std_logic;
+             en_16_x_baud : in std_logic;
+               serial_out : out std_logic;
+              Tx_complete : out std_logic;
+                      clk : in std_logic);
+    end component;
+
 	signal L_ADDR : std_logic_vector(31 downto 0);
 	signal L_DATA_IN : std_logic_vector(7 downto 0);
 	signal L_DATA_OUT : std_logic_vector(7 downto 0);
 	signal L_WE, L_RE : std_logic;
 	signal L_ACK : std_logic;
+
+	signal tx_clk_en : std_logic_vector(8 downto 0);
+	signal baud16 : std_logic;
+	signal serial_ack : std_logic;
+	signal serial_send : std_logic;
+
+	signal serial_cs : std_logic;
+	signal led_cs : std_logic;
 
 begin
 
@@ -75,19 +93,40 @@ begin
 		L_ACK => L_ACK
 	);
 	
-	L_ACK <= L_WE; -- no delay ack
+	serial_cs <= L_WE when L_ADDR(31) = '1' else '0';
+	led_cs <= L_WE when L_ADDR(31) = '0' else '0';
+	
+	L_ACK <= led_cs or (serial_cs and serial_ack);
 	L_DATA_IN <= x"00";
 	
+	Inst_kcuart_tx: kcuart_tx PORT MAP(
+		data_in => L_DATA_OUT,
+		send_character => serial_cs,
+		en_16_x_baud => baud16,
+		serial_out => S_TX,
+		Tx_complete => serial_ack,
+		clk => clk
+	);
+
 	process(clk, rst)
 	begin
 		if rst = '1' then
 			LED <= x"00";
+			tx_clk_en <= (others => '0');
 		elsif clk'event and clk = '1' then
 			
-			if L_WE = '1' then
+			if led_cs = '1' then
 				LED <= L_DATA_OUT;
 			end if;
 			
+			if unsigned(tx_clk_en) = 325 then
+				tx_clk_en <= (others => '0');
+				baud16 <= '1';
+			else
+				tx_clk_en <= std_logic_vector( unsigned(tx_clk_en) + 1 );
+				baud16 <= '0';
+			end if;
+
 		end if;
 	end process;
 
