@@ -13,22 +13,31 @@ void main()
 	SOCKADDR_IN addr;
 	addr.sin_family = AF_INET;
 	addr.sin_addr.s_addr = inet_addr("10.0.0.2");
-	addr.sin_port = htons(80);
+	addr.sin_port = htons(81);
 
-	for (int i = 0; i < 1; i++)
-	{
-		char a = 0xa;
-		char buffer[] = { 0x00, 0x00, 0x00, 0x10, a };
+	SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
+	connect(s, (sockaddr*)&addr, sizeof(addr));
 
-		SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
-		connect(s, (sockaddr*)&addr, sizeof(addr));
-		send(s, buffer, sizeof(buffer), 0);
+	char* largebuffer = new char[1024 * 1024];
+	for (int i = 0; i < 1024 * 1024; ++i)
+		largebuffer[i] = i;
+
+	long offset = htonl(0);
+	send(s, (const char*)&offset, sizeof(offset), 0);
+	send(s, largebuffer, 1024*1024, 0);
+
+//	for (int i = 0; ; i++)
+//	{
+//		char a = 0xa;
+//		char buffer[] = { i };
+//
+//		send(s, buffer, sizeof(buffer), 0);
+//
+//		printf("send %i\n", i);
+//	//	Sleep(10);
+//	}
+
 		closesocket(s);
-
-		printf("send %i\n", i);
-
-	}
-
 
 
 

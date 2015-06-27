@@ -45,15 +45,15 @@ architecture Behavioral of LogicInterface is
 begin
 
 	it_inc <= std_logic_vector(unsigned(it) + 1);
-	stop <= '1' when state = IDLE or it_inc = it_end else '0';
+	stop <= '1' when state = IDLE or it = it_end else '0';
 
 	l_addr <= it;
 	l_data_out <= n_data_in;
 	n_data_out <= l_data_in;
-	l_we <= '1' when state = PUT else '0';
-	l_re <= '1' when state = GET else '0';
-	n_next_out <= '1' when state = GET and l_ack = '1' else '0';
-	n_next_in <= '1' when state = PUT and l_ack = '1' else '0';
+	l_we <= '1' when state = PUT and stop = '0' else '0';
+	l_re <= '1' when state = GET and stop = '0' else '0';
+	n_next_out <= '1' when state = GET and stop = '0' and l_ack = '1' else '0';
+	n_next_in <= '1' when state = PUT and stop = '0' and l_ack = '1' else '0';
 
 	m_data_out(7 downto 1) <= (others => '0');
 	m_data_out(0) <= '0' when state = IDLE else '1';

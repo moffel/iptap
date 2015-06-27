@@ -223,7 +223,8 @@ begin
 --				led <= port_out;
 --			end if;
 			
-			if logic_we = '1' and logic_addr = x"00000010" then
+--			if logic_we = '1' and logic_addr = x"00000010" then
+			if logic_we = '1' then
 				led <= logic_data_out;
 			end if;
 			

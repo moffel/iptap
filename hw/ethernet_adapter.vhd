@@ -99,6 +99,7 @@ architecture Behavioral of ethernet_adapter is
 	signal tx_frame_sent : std_logic;
 	
 	signal rx_counter : std_logic_vector(10 downto 0);
+	signal rx_counter_next : std_logic_vector(10 downto 0);
 	signal rx_data : std_logic_vector(7 downto 0);
 	
 	signal pi_send_byte : std_logic;
@@ -134,6 +135,9 @@ begin
 	port_out_data	<= rx_data when port_addr(0) = '0' else
 							po_data_valid & po_tx_busy & "000000";
 							
+	rx_counter_next <=	(others => '0') when pi_read_done = '1' else
+								std_logic_vector( unsigned(rx_counter) + 1 ) when pi_read_byte = '1' else
+								rx_counter;
 	
 	process(clk, rst)
 	begin
@@ -161,11 +165,7 @@ begin
 				po_tx_busy <= '1';
 			end if;
 			
-			if pi_read_done = '1' then
-				rx_counter <= (others => '0');
-			elsif pi_read_byte = '1' then
-				rx_counter <= std_logic_vector( unsigned(rx_counter) + 1 );
-			end if;
+			rx_counter <= rx_counter_next;
 			
 			if pi_reset = '1' then
 				po_data_valid <= '0';
@@ -184,7 +184,7 @@ begin
 		rx_d => rx_d,
 		rx_dv => rx_dv,
 		o_ready => rx_ready,
-		o_addr => rx_counter,
+		o_addr => rx_counter_next,
 		o_data => rx_data,
 		o_done => pi_read_done,
 		o_filter_data => port_in_data,

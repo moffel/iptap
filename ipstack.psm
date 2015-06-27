@@ -33,7 +33,7 @@ LOGIC_STATUS_BUSY	 EQU	 1
 LED					 DSOUT	 $40
 
 ; constants
-tcp_port	   EQU	 80
+tcp_port	   EQU	 81
 
 ; variables used for packet parsing
 dmac   		   EQU	 $00
@@ -588,8 +588,8 @@ out		s0, NET_WRITE	; header size
 out		s8, NET_WRITE	; tcp flags
 load	s0, 2
 out		s0, NET_WRITE
-load	s0, 128
-out		s0, NET_WRITE	; 640b window size
+load	s0, 0
+out		s0, NET_WRITE	; 512b window size
 
 load	s1, NET_CTRL_CS_SETADDR
 out		s1, NET_CTRL
