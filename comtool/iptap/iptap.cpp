@@ -6,6 +6,7 @@
 
 int connect_socket(char* host, int port)
 {
+	int err;
 	hostent* endpoint = gethostbyname(host);
 	if (!endpoint)
 	{
@@ -26,9 +27,12 @@ int connect_socket(char* host, int port)
 	}
 
 	const long zero = 0;
-	setsockopt(s, SOL_SOCKET, SO_SNDBUF, (char*)&zero, 4);
+	err = setsockopt(s, SOL_SOCKET, SO_SNDBUF, (const char*)&zero, 4);
 
-	int err = connect(s, (sockaddr*)&addr, sizeof(addr));
+	const linger linger_setup = { 1, 10 };
+	err = setsockopt(s, SOL_SOCKET, SO_LINGER, (const char*)&linger_setup, sizeof(linger_setup));
+
+	err = connect(s, (sockaddr*)&addr, sizeof(addr));
 	if (err == -1)
 	{
 		fprintf(stderr, "failed to connect to %s:%i\n", host, port);
@@ -43,7 +47,7 @@ int put(char* host, int port, unsigned long address, FILE* source)
 
 	if (send(s, (const char*)&address, 4, 0) != 4)
 	{
-		fprintf(stderr, "failed to send header");
+		fprintf(stderr, "failed to send header\n");
 		return -2;
 	}
 
@@ -54,9 +58,46 @@ int put(char* host, int port, unsigned long address, FILE* source)
 
 		if (send(s, buffer, len, 0) != len)
 		{
-			fprintf(stderr, "send error");
+			fprintf(stderr, "send error\n");
 			return 1;
 		}
+	}
+
+	closesocket(s);
+	return 0;
+}
+
+int get(char* host, int port, unsigned long address, unsigned short size, FILE* destination)
+{
+	struct
+	{
+		unsigned long offset;
+		unsigned short size;
+	}	header;
+
+	header.offset = htonl(address);
+	header.size = htons(size);
+
+	int s = connect_socket(host, port);
+
+	if (send(s, (char*)&header, 6, 0) != 6)
+	{
+		fprintf(stderr, "failed to send header\n");
+		return -2;
+	}
+
+	char buffer[2048];
+	int len = recv(s, buffer, size, 0);
+	if (len != size)
+	{
+		fprintf(stderr, "recv failed\n");
+		return -2;
+	}
+
+	if (fwrite(buffer, size, 1, destination) != 1)
+	{
+		fprintf(stderr, "write to file failed\n");
+		return -1;
 	}
 
 	closesocket(s);
@@ -70,32 +111,59 @@ int main(int argc, char* argv[])
 
 	if (argc < 4)
 	{
-		fprintf(stderr, "usage: iptap <host> <cmd> <address> [file]\n\tcmd - put | get\n");
+		fprintf(stderr, "usage:\tiptap <host> put <hex address> [input file]\n"
+						"\tiptap <host> get <hex address> <size> [output file]\n");
 		return -1;
 	}
 
 	char* host = argv[1];
-	char* cmd = argv[2];
 	
 	unsigned long addr;
 	sscanf(argv[3], "%x", &addr);
 
-	FILE* stream = stdin;
-	if (argc >= 5)
+	FILE* stream = 0;
+	int cmd;
+	if (!strcmp(argv[2], "put"))
 	{
-		stream = fopen(argv[4], "rb");
-		if (!stream)
-		{
-			fprintf(stderr, "failed to open file %s\n", argv[4]);
-			return -1;
-		}
-	}
+		cmd = 0;
 
-	if (strcmp(cmd, "put"))
+		stream = stdin;
+		if (argc >= 5)
+			stream = fopen(argv[4], "rb");
+	}
+	else if (!strcmp(argv[2], "get"))
 	{
-		fprintf(stderr, "cmd %s not supported\n", cmd);
+		cmd = 1;
+
+		stream = stdout;
+		if (argc >= 6)
+			stream = fopen(argv[5], "wb");
+	}
+	else
+	{
+		fprintf(stderr, "invalid command %s\n", argv[2]);
 		return -1;
 	}
 
-	return put(host, 81, addr, stream);
+	if (!stream)
+	{
+		fprintf(stderr, "failed to open file\n");
+		return -1;
+	}
+
+	if (cmd == 0)
+		return put(host, 81, addr, stream);
+
+	unsigned long size = atoi(argv[4]);
+	while (size)
+	{
+		const unsigned short chunk = size > 1280 ? 1280 : (unsigned short)size;
+		int err = get(host, 82, addr, chunk, stream);
+		if (err != 0)
+			return err;
+
+		addr += chunk;
+		size -= chunk;
+	}
+	return 0;
 }
