@@ -303,7 +303,7 @@ sr0	   s6
 sub	   sD, s6
 subc   sC, 0 		  ; sub tcp header from ip payload size
 
-in	   s5, NET_READ		; read flags
+in	   s9, NET_READ		; read flags
 fetch  s0, tcp_state
 comp   s0, 0
 jump   Z, TCP_LISTEN
@@ -325,9 +325,9 @@ store  s2, TCP_TIMEOUT
 store  s2, TCP_TIMEOUT + 1
 store  s2, TCP_TIMEOUT + 2	; reset
 
-test   s5, $04
+test   s9, $04
 jump   NZ, TCP_RESET_STATE ; reset connection if RST
-test   s5, $10
+test   s9, $10
 jump   Z, TCP_RESET_STATE ; reset connection if no ACK
 
 fetch  s0, tcp_state
@@ -354,7 +354,7 @@ jump	TCP_NEXT_STATE
 
 ;; TCP state listen
 TCP_LISTEN:
-test	s5, 2	   		; check syn flag
+test	s9, 2	   		; check syn flag
 jump	Z, NEXT_PACKET	; only accept new connections in listen state
 
 ; generate new sequence number
@@ -417,18 +417,16 @@ ret
 ;; SERVER
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 SERVER_PARSE:
-load	s6, s5					; tcp flags
+load	s6, s9				   ; tcp flags
 load	s7, sC				   ; bytes in tcp packet												
 load	s8, sD
 comp	sF, 81				   ; binary put port 81
 jump	Z, SERVER_BP_PUT_BEGIN
+comp	sF, 82				   ; binary get port 82
+jump	Z, SERVER_BP_GET_BEGIN
 jump	NEXT_PACKET
 
-SERVER_BP_PUT_BEGIN:
-fetch	s0, BP_STATE
-or		s0, s0
-jump	NZ, SERVER_PUT
-
+SERVER_BP_INIT:
 ; new package (setup logic unit and store address)
 load	s0, 1
 store	s0, BP_STATE
@@ -448,7 +446,14 @@ store	s3, BP_OFFSET + 3
 sub		s8, 4							; sub 4byte header size
 subc	s7, 0
 
-SERVER_PUT:
+ret
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+SERVER_BP_PUT_BEGIN:
+fetch	s0, BP_STATE
+or		s0, s0
+call	Z, SERVER_BP_INIT
+
 ; calculate end address and setup logic unit
 fetch	s0, BP_OFFSET
 fetch	s1, BP_OFFSET + 1
@@ -475,15 +480,66 @@ in		s0, LOGIC_STATUS
 test	s0, LOGIC_STATUS_BUSY
 jump	NZ, SERVER_PUT_LOOP
 
-DEBUG_SKIP:
 ; respond with ACK
-load	s8, s6
+load	s8, s9
 and		s8, $11 ; FIN & ACK
 call	WRITE_TCP_HEAD_EMPTY_AND_SEND
 
 test	s8, $01 ; FIN
 jump	Z, NEXT_PACKET
 jump	TCP_RESET_STATE_NOT_CONNECTED
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+SERVER_BP_GET_BEGIN:
+load	s6, sC
+load	s7, sD
+sub		s7, 6
+subc	s6, 0
+jump	NC, SERVER_BP_GET_RESPOND		; respond if at least 6 bytes in packet																																															
+test	s9, $01 ; FIN
+jump	Z, NEXT_PACKET			 		; ignore ack's																																																		
+load	s8, $10 ; ACK					; finish closing procedure
+call	WRITE_TCP_HEAD_EMPTY_AND_SEND
+jump	TCP_RESET_STATE_NOT_CONNECTED
+
+SERVER_BP_GET_RESPOND:
+call	SERVER_BP_INIT
+in		s6, NET_READ  			; size																																																				
+in		s7, NET_READ
+
+; calculate end address and setup logic unit
+fetch	s0, BP_OFFSET
+fetch	s1, BP_OFFSET + 1
+fetch	s2, BP_OFFSET + 2
+fetch	s3, BP_OFFSET + 3
+add		s3, s7
+addc	s2, s6
+addc	s1, 0
+addc	s0, 0
+out		s0, LOGIC_ADDR_END
+out		s1, LOGIC_ADDR_END
+out		s2, LOGIC_ADDR_END
+out		s3, LOGIC_ADDR_END
+
+load	s8, $11 ; FIN & ACK
+call	WRITE_TCP_HEAD	  		  		; write header
+load	s4, LOGIC_BEGIN_GET
+out		s4, LOGIC_BEGIN	   				; fill data bytes
+
+; wait until DMA unit has finished reading
+SERVER_GET_LOOP:
+in		s0, LOGIC_STATUS
+test	s0, LOGIC_STATUS_BUSY
+jump	NZ, SERVER_GET_LOOP
+
+load	s0, NET_CTRL_CS_END
+out		s0, NET_CTRL	   				; store checksum
+load	s0, 6
+call	WRITE_NET_ZERO	 		 		; padd up to 60b minimal frame length
+load	s0, NET_CTRL_SEND_FRAME
+out		s0, NET_CTRL		   			; send frame
+
+jump	NEXT_PACKET
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -514,6 +570,7 @@ ret
 ; s0!, s1!, s2!, s3!, s4!, s5!
 ; s6, s7 - payload length
 ; s8 - tcp flags
+; s9 - recv tcp flags
 WRITE_TCP_HEAD:
 load	s5, 6			; tcp
 add		s7, 20			; add tcp header size
@@ -572,7 +629,7 @@ fetch   s0, TCP_PEER_R_SEQ
 fetch   s1, TCP_PEER_R_SEQ + 1
 fetch   s2, TCP_PEER_R_SEQ + 2
 fetch   s3, TCP_PEER_R_SEQ + 3
-test	s8, 3		   	; +1 if syn or fin is set
+test	s9, 3		   	; +1 if syn or fin is set
 addc	s3, sD			; increment sequence number by number of bytes received
 addc	s2, sC			
 addc	s1, 0

@@ -96,8 +96,8 @@ begin
 	serial_cs <= L_WE when L_ADDR(31) = '1' else '0';
 	led_cs <= L_WE when L_ADDR(31) = '0' else '0';
 	
-	L_ACK <= led_cs or (serial_cs and serial_ack);
-	L_DATA_IN <= x"00";
+	L_ACK <= led_cs or (serial_cs and serial_ack) or L_RE;
+	L_DATA_IN <= L_ADDR(7 downto 0);
 	
 	Inst_kcuart_tx: kcuart_tx PORT MAP(
 		data_in => L_DATA_OUT,

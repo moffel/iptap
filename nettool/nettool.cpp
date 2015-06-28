@@ -4,6 +4,12 @@
 
 #pragma comment(lib, "WS2_32.lib")
 
+struct get_header
+{
+	unsigned long	offset;
+	unsigned short	size;
+};
+
 void main()
 {
 	WSADATA wsaData;
@@ -13,15 +19,25 @@ void main()
 	SOCKADDR_IN addr;
 	addr.sin_family = AF_INET;
 	addr.sin_addr.s_addr = inet_addr("10.0.0.2");
-	addr.sin_port = htons(81);
+	addr.sin_port = htons(82);
 
 	SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
 
 	long zero = 0;
 	int err = setsockopt(s, SOL_SOCKET, SO_SNDBUF, (char*)&zero, 4);
 
-
 	err = connect(s, (sockaddr*)&addr, sizeof(addr));
+
+#if 1
+	get_header	header;
+	header.offset = htonl(1 << 31);
+	header.size	= htons(1024);
+	err = send(s, (char*)&header, 6, 0);
+
+	char buffer[1024];
+	err = recv(s, buffer, 1024, 0);
+
+#else
 
 	long offset = htonl(1 << 31);
 	err = send(s, (const char*)&offset, sizeof(offset), 0);
@@ -33,7 +49,7 @@ void main()
 
 //	while (1)
 	{
-		err = send(s, largebuffer, 128, 0);
+		err = send(s, largebuffer, 1024, 0);
 	}
 
 
@@ -47,7 +63,7 @@ void main()
 //		printf("send %i\n", i);
 //	//	Sleep(10);
 //	}
-
+#endif
 	err = closesocket(s);
 
 
