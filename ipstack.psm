@@ -51,8 +51,6 @@ tcp_sport	   EQU	 $14 ; 2b - source port sent by client
 tcp_seq		   EQU	 $16 ; 4b - sequence number sent by client
 tcp_ack		   EQU	 $1A ; 4b - ack number sent by client
 
-stack  		   EQU   $22 ; first free stack byte
-
 ; global variables
 BP_OFFSET	   EQU	 $1E ; 4b - current logic offset
 BP_STATE	   EQU	 $22 ; 1b - binary protocol state
@@ -101,8 +99,6 @@ store	s9, mymac + 5
 ; initical tcp state
 load	s0, 0
 store	s0, tcp_state
-
-load	sF, stack
 
 load	s0, 0	 	  ; stop ethernet adapter reset
 out		s0, NET_CTRL
@@ -292,9 +288,12 @@ IP_TCP:
 load   s0, 3			; read two bytes and skip one
 load   s1, tcp_sport
 call   READ_NET			; read source port for reply
-in	   s0, NET_READ
-comp   s0, tcp_port
-jump   NZ, NEXT_PACKET	; compare destination port to our port number (80)
+in	   sF, NET_READ		; read destination port
+load   s0, sF
+sub	   s0, 80
+jump   C, NEXT_PACKET
+comp   s0, 3
+jump   NC, NEXT_PACKET	; compare destination port to our port range (80-82)
 load   s0, 8
 load   s1, tcp_seq
 call   READ_NET	  		; read seq and ack number
@@ -421,6 +420,11 @@ SERVER_PARSE:
 load	s6, s5					; tcp flags
 load	s7, sC				   ; bytes in tcp packet												
 load	s8, sD
+comp	sF, 81				   ; binary put port 81
+jump	Z, SERVER_BP_PUT_BEGIN
+jump	NEXT_PACKET
+
+SERVER_BP_PUT_BEGIN:
 fetch	s0, BP_STATE
 or		s0, s0
 jump	NZ, SERVER_PUT
@@ -536,8 +540,7 @@ out		s0, NET_CTRL
 
 load	s5, 0
 out		s5, NET_WRITE
-load	s0, tcp_port
-out		s0, NET_WRITE	 	; source port
+out		sF, NET_WRITE	 	; source port
 load	s0, 2
 load	s1, TCP_PEER_PORT
 call	WRITE_NET	 	; destination port
