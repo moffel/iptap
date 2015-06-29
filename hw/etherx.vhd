@@ -159,8 +159,8 @@ begin
 	o_ready_trigger <=	'1' when state = RECEIVING and next_state = WAITING else
 								'0';
 
-	crc_valid <=			'1' when x"C704DD7B" = crc_gen else
-								'0';
+	crc_valid <=	'1';--		'1' when x"C704DD7B" = crc_gen else
+							--	'0';
 	crc_rst <=				'1' when state = IDLE else
 								'0';
 	

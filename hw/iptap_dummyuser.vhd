@@ -69,10 +69,13 @@ architecture Behavioral of iptap_dummyuser is
 	signal baud16 : std_logic;
 	signal serial_ack : std_logic;
 	signal serial_send : std_logic;
+	
+	type memory_type is array (0 to 2047) of std_logic_vector(7 downto 0);
+	signal memory : memory_type;
 
 	signal serial_cs : std_logic;
 	signal led_cs : std_logic;
-
+	signal ram_cs : std_logic;
 begin
 
 	Inst_iptap: iptap PORT MAP(
@@ -93,11 +96,11 @@ begin
 		L_ACK => L_ACK
 	);
 	
-	serial_cs <= L_WE when L_ADDR(31) = '1' else '0';
-	led_cs <= L_WE when L_ADDR(31) = '0' else '0';
+	serial_cs <= L_WE when L_ADDR(31 downto 30) = "10" else '0';
+	led_cs <= L_WE when L_ADDR(31 downto 30) = "00" else '0';
+	ram_cs <= L_WE when L_ADDR(31 downto 30) = "11" else '0';
 	
-	L_ACK <= led_cs or (serial_cs and serial_ack) or L_RE;
-	L_DATA_IN <= L_ADDR(7 downto 0);
+	L_ACK <= ram_cs or led_cs or (serial_cs and serial_ack) or L_RE;
 	
 	Inst_kcuart_tx: kcuart_tx PORT MAP(
 		data_in => L_DATA_OUT,
@@ -117,6 +120,12 @@ begin
 			
 			if led_cs = '1' then
 				LED <= L_DATA_OUT;
+			end if;
+			
+			L_DATA_IN <= memory(to_integer(unsigned(L_ADDR(10 downto 0))));
+			
+			if ram_cs = '1' then
+				memory(to_integer(unsigned(L_ADDR(10 downto 0)))) <= L_DATA_OUT;
 			end if;
 			
 			if unsigned(tx_clk_en) = 325 then
