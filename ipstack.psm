@@ -40,8 +40,7 @@ dmac   		   EQU	 $00
 smac   		   EQU	 $06
 
 ; variables used for replies
-arp_static	   EQU	 $10 ; 7b
-arp_source	   EQU	 $17 ; 10b
+arp_source	   EQU	 $10 ; 10b
 
 ; varibales used for ip
 ip_saddr	   EQU	 $10 ; 4b
@@ -159,8 +158,7 @@ jump   NEXT_PACKET
 ARP:
 ; this is an arp frame
 load   s0, 7
-load   s1, arp_static
-call   READ_NET
+call   SKIP_NET
 in	   s0, NET_READ
 comp   s0, 1  	 ; arp request
 jump   NZ, NEXT_PACKET
@@ -183,11 +181,20 @@ jump   Z, NEXT_PACKET
 ; this is indeed an ARP request targeted at us.
 load   s4, 6 ; ARP protocol id
 call   WRITE_ETHERNET
-load   s0, 7
-load   s1, arp_static
-call   WRITE_NET	 ; first static 7b of arp packet
-load   s0, 2
-out	   s0, NET_WRITE	 ; arp type 2 == reply
+load   s0, 0
+load   s1, 1
+out	   s0, NET_WRITE
+out	   s1, NET_WRITE 		; hardware type Ethernet
+load   s1, 8
+out	   s1, NET_WRITE
+out	   s0, NET_WRITE		; protocol type IP
+load   s1, 6
+out	   s1, NET_WRITE		; hardware size 6
+load   s1, 4
+out	   s1, NET_WRITE		; protocol size 4
+load   s1, 2
+out	   s0, NET_WRITE
+out	   s1, NET_WRITE		; arp type 2 == reply
 load   s0, 10
 load   s1, mymac	
 call   WRITE_NET	 ; arp source mac and ip
