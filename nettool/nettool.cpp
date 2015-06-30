@@ -56,12 +56,12 @@ void main()
 	const unsigned addr_uart = 0x80000000u;
 	const unsigned addr_mem = 0xC0000000u;
 
-	put(addr_mem, testdata, 4);
+	put(addr_mem, testdata, 1024);
 
 	char getdata[1024];
-	get(addr_mem, getdata, 4);
+	get(addr_mem, getdata, 1024);
 
-
+	int equal = memcmp(testdata, getdata, 1024);
 
 
 }

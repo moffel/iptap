@@ -27,7 +27,7 @@ entity LogicInterface is
 			l_data_in : in std_logic_vector(7 downto 0);
 			l_data_out : out std_logic_vector(7 downto 0);
 			l_we, l_re : out std_logic;
-			l_ack : in std_logic
+			l_ack, l_data_in_valid : in std_logic
 	 );
 end LogicInterface;
 
@@ -37,7 +37,6 @@ architecture Behavioral of LogicInterface is
 	signal it_inc : std_logic_vector(31 downto 0);
 	signal it_end : std_logic_vector(31 downto 0);
 	
-	signal stop : std_logic;
 	
 	type state_type is (IDLE, GET, PUT);
 	signal state, next_state: state_type;
@@ -45,15 +44,14 @@ architecture Behavioral of LogicInterface is
 begin
 
 	it_inc <= std_logic_vector(unsigned(it) + 1);
-	stop <= '1' when state = IDLE or it = it_end else '0';
 
 	l_addr <= it;
 	l_data_out <= n_data_in;
 	n_data_out <= l_data_in;
-	l_we <= '1' when state = PUT and stop = '0' else '0';
-	l_re <= '1' when state = GET and stop = '0' else '0';
-	n_next_out <= '1' when state = GET and stop = '0' and l_ack = '1' else '0';
-	n_next_in <= '1' when state = PUT and stop = '0' and l_ack = '1' else '0';
+	l_we <= '1' when state = PUT and not (it = it_end) else '0';
+	l_re <= '1' when state = GET and not (it = it_end) else '0';
+	n_next_out <= l_data_in_valid;
+	n_next_in <= l_ack when state = PUT else '0';
 
 	m_data_out(7 downto 1) <= (others => '0');
 	m_data_out(0) <= '0' when state = IDLE else '1';
@@ -65,7 +63,7 @@ begin
 		elsif clk'event and clk = '1' then
 			state <= next_state;
 			
-			if stop = '0' and l_ack = '1' then
+			if l_ack = '1' then
 				it <= it_inc;
 			end if;
 			
@@ -86,7 +84,7 @@ begin
 		end if;
 	end process;
 
-	process(state, stop, m_we, m_addr, m_data_in)
+	process(state, it, it_end, m_we, m_addr, m_data_in)
 	begin
 		next_state <= state;
 	
@@ -101,12 +99,12 @@ begin
 				end if;
 				
 			when PUT =>
-				if stop = '1' then
+				if it = it_end then
 					next_state <= IDLE;
 				end if;
 
 			when GET =>
-				if stop = '1' then
+				if it = it_end then
 					next_state <= IDLE;
 				end if;
 			

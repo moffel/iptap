@@ -31,7 +31,7 @@ entity iptap is
 				L_DATA_IN : in std_logic_vector(7 downto 0);
 				L_DATA_OUT : out std_logic_vector(7 downto 0);
 				L_WE, L_RE : out std_logic;
-				L_ACK : in std_logic
+				L_ACK, L_DATA_VALID : in std_logic
 	 );
 end iptap;
 
@@ -97,7 +97,7 @@ architecture Behavioral of iptap is
 			l_data_in : in std_logic_vector(7 downto 0);
 			l_data_out : out std_logic_vector(7 downto 0);
 			l_we, l_re : out std_logic;
-			l_ack : in std_logic
+			l_ack, l_data_in_valid : in std_logic
 	 );
 	END COMPONENT;
 
@@ -192,7 +192,8 @@ begin
 		l_data_out => L_DATA_OUT,
 		l_we => L_WE,
 		l_re => L_RE,
-		l_ack => L_ACK
+		l_ack => L_ACK,
+		l_data_in_valid => L_DATA_VALID
 	);
 	
 	------------------------------------

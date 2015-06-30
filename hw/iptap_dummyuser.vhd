@@ -39,7 +39,7 @@ architecture Behavioral of iptap_dummyuser is
 		E_RX_CLK : IN std_logic;
 		E_TX_CLK : IN std_logic;
 		L_DATA_IN : IN std_logic_vector(7 downto 0);
-		L_ACK : IN std_logic;          
+		L_ACK, L_DATA_VALID : IN std_logic;          
 		E_NRST : OUT std_logic;
 		E_TXD : OUT std_logic_vector(3 downto 0);
 		E_TX_EN : OUT std_logic;
@@ -63,7 +63,7 @@ architecture Behavioral of iptap_dummyuser is
 	signal L_DATA_IN : std_logic_vector(7 downto 0);
 	signal L_DATA_OUT : std_logic_vector(7 downto 0);
 	signal L_WE, L_RE : std_logic;
-	signal L_ACK : std_logic;
+	signal L_ACK, L_DATA_VALID : std_logic;
 
 	signal tx_clk_en : std_logic_vector(8 downto 0);
 	signal baud16 : std_logic;
@@ -76,6 +76,8 @@ architecture Behavioral of iptap_dummyuser is
 	signal serial_cs : std_logic;
 	signal led_cs : std_logic;
 	signal ram_cs : std_logic;
+	
+	signal read_delay : std_logic;
 begin
 
 	Inst_iptap: iptap PORT MAP(
@@ -93,7 +95,8 @@ begin
 		L_DATA_OUT => L_DATA_OUT,
 		L_WE => L_WE,
 		L_RE => L_RE,
-		L_ACK => L_ACK
+		L_ACK => L_ACK,
+		L_DATA_VALID => L_DATA_VALID
 	);
 	
 	serial_cs <= L_WE when L_ADDR(31 downto 30) = "10" else '0';
@@ -123,6 +126,7 @@ begin
 			end if;
 			
 			L_DATA_IN <= memory(to_integer(unsigned(L_ADDR(10 downto 0))));
+			L_DATA_VALID <= L_RE;
 			
 			if ram_cs = '1' then
 				memory(to_integer(unsigned(L_ADDR(10 downto 0)))) <= L_DATA_OUT;
