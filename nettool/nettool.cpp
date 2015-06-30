@@ -1,6 +1,8 @@
 #include <WinSock2.h>
 #include <Windows.h>
 #include <stdio.h>
+#include <time.h>
+#include <assert.h>
 
 #pragma comment(lib, "WS2_32.lib")
 
@@ -48,20 +50,26 @@ void main()
 	addr.sin_family = AF_INET;
 	addr.sin_addr.s_addr = inet_addr("10.0.0.2");
 
-	char testdata[1024];
-	for (int i = 0; i < 1024; ++i)
-		testdata[i] = 'a' + rand() % 26;
+	srand(time(NULL));
+	while (1)
+	{
+		char testdata[1024];
+		char getdata[1024];
+		int len = rand() % 1024;
 
-	const unsigned addr_led = 0;
-	const unsigned addr_uart = 0x80000000u;
-	const unsigned addr_mem = 0xC0000000u;
+		for (int i = 0; i < len; ++i)
+			testdata[i] = 'a' + rand() % 26;
 
-	put(addr_mem, testdata, 1024);
+		const unsigned addr_led = 0;
+		const unsigned addr_uart = 0x80000000u;
+		const unsigned addr_mem = 0xC0000000u;
 
-	char getdata[1024];
-	get(addr_mem, getdata, 1024);
+		put(addr_mem, testdata, len);
+		get(addr_mem, getdata, len);
 
-	int equal = memcmp(testdata, getdata, 1024);
+		int equal = memcmp(testdata, getdata, len);
+		assert(equal == 0);
+	}
 
 
 }

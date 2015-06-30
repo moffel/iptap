@@ -532,6 +532,13 @@ in		s0, LOGIC_STATUS
 test	s0, LOGIC_STATUS_BUSY
 jump	NZ, SERVER_GET_LOOP
 
+; current implementation of logic interface allows async reads wich may take some extra cycles to complete
+; this loop waits for 16*4 cycles
+load	s0, 16
+SERVER_GET_WAIT_LOOP:
+sub		s0, 1
+jump	NZ, SERVER_GET_WAIT_LOOP
+
 load	s0, NET_CTRL_CS_END
 out		s0, NET_CTRL	   				; store checksum
 load	s0, 6
