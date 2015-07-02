@@ -45,6 +45,7 @@ int put(char* host, int port, unsigned long address, FILE* source)
 {
 	int s = connect_socket(host, port);
 
+	address = htonl(address);
 	if (send(s, (const char*)&address, 4, 0) != 4)
 	{
 		fprintf(stderr, "failed to send header\n");
